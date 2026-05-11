@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "256468769963",
+    "project_id": "raktasevaconnect-c6229",
+    "storage_bucket": "raktasevaconnect-c6229.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:256468769963:android:f2cdca6f15d9d952402bee",
+        "android_client_info": {
+          "package_name": "com.raktaseva.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAHMbivlHLk7QIHWh0Iefo1ntwNdpv9Ms"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

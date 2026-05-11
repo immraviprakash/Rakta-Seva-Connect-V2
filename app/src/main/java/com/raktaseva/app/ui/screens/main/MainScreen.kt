@@ -27,7 +27,10 @@ sealed class BottomNavScreen(val route: String, val label: String, val icon: Ima
 @Composable
 fun MainScreen(
     onNavigateToRequest: () -> Unit,
-    onNavigateToChat: () -> Unit
+    onNavigateToChat: () -> Unit,
+    onLogoutClick: () -> Unit,
+    onNavigateToEditProfile: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val navController = rememberNavController()
     val items = listOf(
@@ -82,7 +85,12 @@ fun MainScreen(
             composable(BottomNavScreen.Donors.route) { DonorsScreen() }
             composable(BottomNavScreen.Requests.route) { RequestsScreen() }
             composable(BottomNavScreen.Profile.route) { 
-                ProfileScreen(onChatClick = onNavigateToChat) 
+                ProfileScreen(
+                    onChatClick = onNavigateToChat,
+                    onLogoutClick = onLogoutClick,
+                    onEditProfileClick = onNavigateToEditProfile,
+                    onSettingsClick = onNavigateToSettings
+                ) 
             }
         }
     }

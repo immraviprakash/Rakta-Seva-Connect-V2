@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.raktaseva.app.ui.components.BloodGroupBadge
+import com.raktaseva.app.ui.state.LocalUserState
 
 @Composable
 fun HomeScreen(onNavigateToRequest: () -> Unit) {
@@ -90,6 +91,16 @@ fun HomeScreen(onNavigateToRequest: () -> Unit) {
 
 @Composable
 fun AvailabilityCard() {
+    val isEligible = LocalUserState.isEligibleToDonate()
+    val lastDate = LocalUserState.lastDonationDate.value.ifBlank { "Never" }
+    val nextDate = if (isEligible) "Now" else "In ${LocalUserState.getDaysUntilEligible()} days"
+    val progress = if (isEligible) 1f else {
+        val days = LocalUserState.getDaysSinceLastDonation() ?: 0
+        (days.toFloat() / 90f).coerceIn(0f, 1f)
+    }
+    val statusText = if (isEligible) "Ready to Donate" else "Not Eligible"
+    val progressColor = if (isEligible) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -103,18 +114,18 @@ fun AvailabilityCard() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Ready to Donate",
+                statusText,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Light,
                 color = Color.White
             )
             Spacer(modifier = Modifier.height(20.dp))
             androidx.compose.material3.LinearProgressIndicator(
-                progress = 1f,
+                progress = progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp),
-                color = MaterialTheme.colorScheme.tertiary,
+                color = progressColor,
                 trackColor = Color(0xFF333333),
                 strokeCap = StrokeCap.Round
             )
@@ -124,8 +135,8 @@ fun AvailabilityCard() {
                     .padding(top = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Last: Nov 12, 2023", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAAAAAA))
-                Text("Next: Now", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAAAAAA))
+                Text("Last: $lastDate", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAAAAAA))
+                Text("Next: $nextDate", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAAAAAA))
             }
         }
     }
