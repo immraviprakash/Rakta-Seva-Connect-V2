@@ -9,7 +9,6 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
@@ -17,6 +16,7 @@ import com.google.firebase.firestore.Query
 import com.raktaseva.app.ui.components.BloodGroupBadge
 import com.raktaseva.app.data.model.UserProfile
 import com.raktaseva.app.ui.state.LocalUserState
+import com.raktaseva.app.ui.theme.Dimens
 import com.raktaseva.app.utils.BloodCompatibility
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -91,15 +91,19 @@ fun DonorsScreen() {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search by name or needed blood group (e.g. A+)") },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(12.dp),
+                placeholder = { Text("Search by name or blood group") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.screenHorizontal, vertical = Dimens.spacingSm),
+                shape = RoundedCornerShape(Dimens.cardRadius),
                 singleLine = true
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.screenHorizontal, vertical = Dimens.spacingXs),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.spacingSm)
             ) {
                 FilterChip(
                     selected = showEligibleOnly,
@@ -118,14 +122,16 @@ fun DonorsScreen() {
                     CircularProgressIndicator()
                 }
             } else if (filteredDonors.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().padding(Dimens.screenHorizontal), contentAlignment = androidx.compose.ui.Alignment.Center) {
                     Text("No donors found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = Dimens.screenHorizontal),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
+                    contentPadding = PaddingValues(top = Dimens.spacingSm, bottom = Dimens.screenVertical)
                 ) {
                     items(filteredDonors, key = { it.uid }) { donor ->
                         DonorCard(donor)
@@ -142,35 +148,37 @@ fun DonorCard(donor: UserProfile, showContact: Boolean = false) {
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(Dimens.cardRadius),
+        elevation = CardDefaults.cardElevation(defaultElevation = Dimens.cardElevation),
         colors = CardDefaults.cardColors(
             containerColor = if (isEligible) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Dimens.cardPadding),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
-            BloodGroupBadge(group = donor.bloodGroup, size = 44)
-            Spacer(modifier = Modifier.width(16.dp))
+            BloodGroupBadge(group = donor.bloodGroup, size = 40)
+            Spacer(modifier = Modifier.width(Dimens.spacingMd))
             Column(modifier = Modifier.weight(1f)) {
-                Text(donor.fullName, fontWeight = FontWeight.Bold)
+                Text(donor.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(Dimens.spacingXxs))
                 
-                if (donor.lastDonationDate.isNotBlank()) {
-                    Text("Last Donated: ${donor.lastDonationDate}", style = MaterialTheme.typography.bodySmall)
-                } else {
-                    Text("Last Donated: Never", style = MaterialTheme.typography.bodySmall)
-                }
+                Text(
+                    if (donor.lastDonationDate.isNotBlank()) "Last: ${donor.lastDonationDate}" else "Last: Never",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(Dimens.spacingXs))
                 
                 if (isEligible) {
-                    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
-                        Text("Eligible Donor", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(6.dp)) {
+                        Text("Eligible", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                     }
                 } else {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(4.dp)) {
-                        Text("Cooldown Active", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(6.dp)) {
+                        Text("Cooldown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                     }
                 }
             }

@@ -8,13 +8,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.raktaseva.app.data.model.Notification
 import com.raktaseva.app.ui.state.LocalUserState
+import com.raktaseva.app.ui.theme.Dimens
+import androidx.compose.foundation.layout.offset
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -60,14 +61,16 @@ fun NotificationsScreen() {
                     CircularProgressIndicator()
                 }
             } else if (notifications.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().padding(Dimens.screenHorizontal), contentAlignment = Alignment.Center) {
                     Text("No notifications yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = Dimens.screenHorizontal),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
+                    contentPadding = PaddingValues(top = Dimens.spacingSm, bottom = Dimens.screenVertical)
                 ) {
                     items(notifications, key = { it.notificationId }) { notif ->
                         NotificationCard(notif)
@@ -91,47 +94,59 @@ fun NotificationCard(notification: Notification) {
         },
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (notification.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            containerColor = if (notification.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(Dimens.cardRadius),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (notification.isRead) 0.dp else Dimens.cardElevation)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = notification.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.Bold
-                )
-                if (!notification.isRead) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(10.dp)
-                    ) {}
+        Row(
+            modifier = Modifier.padding(horizontal = Dimens.cardPadding, vertical = Dimens.spacingMd),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Unread indicator dot
+            if (!notification.isRead) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(8.dp)
+                        .offset(y = 6.dp)
+                ) {}
+                Spacer(modifier = Modifier.width(Dimens.spacingMd))
+            }
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = notification.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.Bold,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    val dateStr = try {
+                        val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
+                        sdf.format(notification.createdAt.toDate())
+                    } catch (e: Exception) {
+                        "Just now"
+                    }
+                    Text(
+                        text = dateStr,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+                Spacer(modifier = Modifier.height(Dimens.spacingXs))
+                Text(
+                    text = notification.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = notification.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            val dateStr = try {
-                val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
-                sdf.format(notification.createdAt.toDate())
-            } catch (e: Exception) {
-                "Just now"
-            }
-            Text(
-                text = dateStr,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
         }
     }
 }

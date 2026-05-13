@@ -49,6 +49,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.raktaseva.app.ui.theme.Dimens
+import com.raktaseva.app.ui.theme.LightHeroCard
+import com.raktaseva.app.ui.theme.LightHeroOnCard
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -94,7 +98,7 @@ fun HomeScreen(onNavigateToRequest: () -> Unit) {
                 text = { Text("Request Blood") },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(Dimens.fabRadius)
             )
         }
     ) { padding ->
@@ -102,18 +106,18 @@ fun HomeScreen(onNavigateToRequest: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(start = Dimens.screenHorizontal, top = Dimens.screenVertical, end = Dimens.screenHorizontal, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimens.cardSpacing)
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.spacingXs)) {
                     Text(
                         "Emergency Dashboard",
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        "3 critical requests pending within 5 km of your location.",
+                        "Active requests in your area",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -124,9 +128,10 @@ fun HomeScreen(onNavigateToRequest: () -> Unit) {
             }
             item {
                 Text(
-                    "Live Critical Requests",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "LIVE CRITICAL REQUESTS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Dimens.spacingXs)
                 )
             }
             if (isLoading) {
@@ -172,42 +177,49 @@ fun AvailabilityCard() {
     val statusText = if (isEligible) "Ready to Donate" else "Not Eligible"
     val progressColor = if (isEligible) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
 
+    val isDark = isSystemInDarkTheme()
+    val heroBackground = if (isDark) MaterialTheme.colorScheme.surfaceVariant else LightHeroCard
+    val heroOnSurface = if (isDark) MaterialTheme.colorScheme.onSurface else LightHeroOnCard
+    val heroMuted = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFB0B0B0)
+    val heroTrack = if (isDark) MaterialTheme.colorScheme.surface else Color(0xFF4A4A4C)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(Dimens.cardRadius),
+        colors = CardDefaults.cardColors(containerColor = heroBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(Dimens.cardPadding)) {
             Text(
-                "Donor Eligibility",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "DONOR ELIGIBILITY",
+                style = MaterialTheme.typography.labelMedium,
+                color = heroMuted
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(Dimens.spacingSm))
             Text(
                 statusText,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Light,
-                color = MaterialTheme.colorScheme.onSurface
+                color = heroOnSurface
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(Dimens.spacingLg))
             androidx.compose.material3.LinearProgressIndicator(
                 progress = progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp),
                 color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surface,
+                trackColor = heroTrack,
                 strokeCap = StrokeCap.Round
             )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp),
+                    .padding(top = Dimens.spacingSm),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Last: $lastDate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Next: $nextDate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Last: $lastDate", style = MaterialTheme.typography.labelSmall, color = heroMuted)
+                Text("Next: $nextDate", style = MaterialTheme.typography.labelSmall, color = heroMuted)
             }
         }
     }
@@ -268,17 +280,17 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(Dimens.cardRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = Dimens.cardElevation)
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(modifier = Modifier.padding(Dimens.cardPadding)) {
             Row(
                 verticalAlignment = androidx.compose.ui.Alignment.Top
             ) {
-                BloodGroupBadge(group = request.bloodGroup, size = 48)
-                Spacer(modifier = Modifier.width(16.dp))
+                BloodGroupBadge(group = request.bloodGroup, size = 42)
+                Spacer(modifier = Modifier.width(Dimens.spacingMd))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -326,19 +338,19 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(Dimens.spacingSm))
                     Text(request.hospitalName, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "Requester: ${request.requesterName} - ${request.unitsRequired} units required.",
+                        "${request.requesterName} · ${request.unitsRequired} units",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
-            Divider(color = MaterialTheme.colorScheme.outline)
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(Dimens.spacingMd))
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(Dimens.spacingMd))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (request.requesterUid == currentUid) {
@@ -368,7 +380,7 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                                 batch.commit()
                             },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                         ) {
                             Text("Archive Request", fontWeight = FontWeight.Bold)
@@ -376,7 +388,7 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         OutlinedButton(
                             onClick = { showResponders = !showResponders },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                         ) {
@@ -386,7 +398,7 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         OutlinedButton(
                             onClick = { showCompatibleDonors = !showCompatibleDonors },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                         ) {
@@ -395,7 +407,7 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         OutlinedButton(
                             onClick = { showCancelDialog = true },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {
@@ -406,8 +418,8 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                     if (localAccepted) {
                         Surface(
                             modifier = Modifier.weight(1f).height(40.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(8.dp)
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(Dimens.buttonRadius)
                         ) {
                             Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
                                 Text("Accepted by You", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -448,7 +460,7 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                             },
                             modifier = Modifier.weight(1f),
                             enabled = !localAccepted && !isAccepting,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             if (isAccepting) {
@@ -463,7 +475,7 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                             showSnackbar("Notes: ${request.additionalNotes}")
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(Dimens.buttonRadius),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                     ) {
                         Text("Details", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)

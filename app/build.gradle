@@ -4,6 +4,12 @@ plugins {
     id 'com.google.gms.google-services'
 }
 
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+
 android {
     namespace 'com.raktaseva.app'
     compileSdk 34
@@ -19,6 +25,8 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+
+        buildConfigField("String", "GEMINI_API_KEY", '"' + (localProperties['GEMINI_API_KEY'] ?: '') + '"')
     }
 
     buildTypes {
@@ -36,6 +44,7 @@ android {
     }
     buildFeatures {
         compose true
+        buildConfig true
     }
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.8'
@@ -66,7 +75,7 @@ dependencies {
     implementation 'io.coil-kt:coil-compose:2.5.0'
     
     // Google Gemini
-    implementation 'com.google.ai.client.generativeai:generativeai:0.1.0'
+    implementation 'com.google.ai.client.generativeai:generativeai:0.7.0'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

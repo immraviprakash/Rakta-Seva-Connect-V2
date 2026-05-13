@@ -1,9 +1,14 @@
 package com.raktaseva.app.ui.screens.ai
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -13,28 +18,186 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.google.ai.client.generativeai.GenerativeModel
+import com.raktaseva.app.BuildConfig
+import com.raktaseva.app.ui.theme.Dimens
+import kotlinx.coroutines.launch
 
-data class ChatMessage(val text: String, val isUser: Boolean)
+data class ChatMessage(
+    val text: String,
+    val isUser: Boolean,
+    val isError: Boolean = false,
+    val isLoading: Boolean = false
+)
+
+private const val SYSTEM_PROMPT = """You are Rakta-Seva AI Assistant — a supportive, calm, and medically-aware blood donation companion built into the Rakta-Seva Connect app.
+
+Your role:
+- Answer questions about blood donation, compatibility, eligibility, recovery, and emergency requests.
+- Provide helpful healthcare guidance related to blood donation.
+- Be conversational, supportive, and beginner-friendly.
+- Keep responses concise (2-4 short paragraphs max).
+- Use simple language a non-medical person can understand.
+
+Blood compatibility rules you know:
+- O- is the universal donor (can donate to all)
+- AB+ is the universal recipient (can receive from all)
+- O+ can donate to O+, A+, B+, AB+
+- A+ can donate to A+, AB+
+- B+ can donate to B+, AB+
+- A- can donate to A+, A-, AB+, AB-
+- B- can donate to B+, B-, AB+, AB-
+
+Eligibility rules:
+- Minimum 90 days (3 months) gap between donations
+- Minimum age: 18 years
+- Minimum weight: 50 kg
+- Must be healthy with no active infections
+
+Important safety rules:
+- You are NOT a doctor. Always clarify this for serious medical concerns.
+- For dangerous symptoms (chest pain, severe bleeding, fainting): strongly recommend calling emergency services or visiting a hospital immediately.
+- Never diagnose conditions or prescribe medication.
+
+You can also help users:
+- Draft emergency blood request messages
+- Understand donation processes
+- Learn about post-donation recovery and diet
+- Understand the Rakta-Seva Connect app features
+
+Always respond in a warm, supportive tone. Use emoji sparingly (❤️ 🩸) when appropriate."""
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiChatbotScreen(onBack: () -> Unit) {
     var messageText by remember { mutableStateOf("") }
     val chatMessages = remember { mutableStateListOf<ChatMessage>() }
-    
+    var isGenerating by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Initialize Gemini model
+    val generativeModel = remember {
+        try {
+            GenerativeModel(
+                modelName = "gemini-1.5-flash",
+                apiKey = BuildConfig.GEMINI_API_KEY
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Welcome message
     LaunchedEffect(Unit) {
         if (chatMessages.isEmpty()) {
-            chatMessages.add(ChatMessage("Hello! I am your Rakta-Seva Assistant. How can I help you regarding blood donation today?", false))
+            chatMessages.add(
+                ChatMessage(
+                    "Hello! I'm your Rakta-Seva AI Assistant 🩸\n\nI can help you with:\n• Blood donation eligibility\n• Blood type compatibility\n• Post-donation recovery tips\n• Drafting emergency requests\n• General blood donation questions\n\nHow can I help you today?",
+                    isUser = false
+                )
+            )
+        }
+    }
+
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
+    fun sendMessage(text: String) {
+        if (text.isBlank() || isGenerating) return
+        
+        val userMessage = text.trim()
+        chatMessages.add(ChatMessage(userMessage, isUser = true))
+        messageText = ""
+        isGenerating = true
+
+        // Add loading indicator
+        chatMessages.add(ChatMessage("", isUser = false, isLoading = true))
+
+        coroutineScope.launch {
+            try {
+                if (generativeModel == null) {
+                    // Remove loading
+                    chatMessages.removeAll { it.isLoading }
+                    chatMessages.add(ChatMessage("AI service is currently unavailable. Please check your configuration and try again.", isUser = false, isError = true))
+                    isGenerating = false
+                    return@launch
+                }
+
+                // Build conversation context with system prompt
+                val fullPrompt = buildString {
+                    appendLine(SYSTEM_PROMPT)
+                    appendLine()
+                    appendLine("--- Conversation ---")
+                    // Include recent conversation history for context (last 10 messages)
+                    val recentMessages = chatMessages.filter { !it.isLoading }.takeLast(10)
+                    for (msg in recentMessages) {
+                        if (msg.isUser) {
+                            appendLine("User: ${msg.text}")
+                        } else if (!msg.isError) {
+                            appendLine("Assistant: ${msg.text}")
+                        }
+                    }
+                    appendLine()
+                    appendLine("Respond to the user's latest message naturally and helpfully.")
+                }
+
+                val response = generativeModel.generateContent(fullPrompt)
+                val responseText = response.text?.trim()
+
+                // Remove loading indicator
+                chatMessages.removeAll { it.isLoading }
+
+                if (responseText.isNullOrBlank()) {
+                    chatMessages.add(ChatMessage("I couldn't generate a response. Please try rephrasing your question.", isUser = false, isError = true))
+                } else {
+                    chatMessages.add(ChatMessage(responseText, isUser = false))
+                }
+            } catch (e: Exception) {
+                // Remove loading indicator
+                chatMessages.removeAll { it.isLoading }
+
+                val errorMessage = when {
+                    e.message?.contains("API key", ignoreCase = true) == true -> 
+                        "API key issue. Please verify the Gemini API key configuration."
+                    e.message?.contains("network", ignoreCase = true) == true ||
+                    e.message?.contains("connect", ignoreCase = true) == true ||
+                    e.message?.contains("timeout", ignoreCase = true) == true -> 
+                        "Unable to connect. Please check your internet connection and try again."
+                    e.message?.contains("quota", ignoreCase = true) == true ||
+                    e.message?.contains("rate", ignoreCase = true) == true -> 
+                        "Rate limit reached. Please wait a moment and try again."
+                    else -> 
+                        "Something went wrong. Please try again."
+                }
+                chatMessages.add(ChatMessage(errorMessage, isUser = false, isError = true))
+            } finally {
+                isGenerating = false
+            }
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("AI Assistant") },
+                title = {
+                    Column {
+                        Text("AI Assistant", fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isGenerating) "Thinking..." else "Powered by Gemini",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isGenerating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -48,54 +211,77 @@ fun AiChatbotScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Chat messages list
             LazyColumn(
-                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = Dimens.screenHorizontal),
+                verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
+                contentPadding = PaddingValues(vertical = Dimens.spacingMd)
             ) {
-                items(chatMessages) { msg ->
-                    ChatBubble(msg)
+                items(chatMessages, key = { chatMessages.indexOf(it) }) { msg ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 })
+                    ) {
+                        if (msg.isLoading) {
+                            LoadingBubble()
+                        } else {
+                            ChatBubble(msg)
+                        }
+                    }
                 }
             }
-            
+
+            // Divider
+            Divider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+
+            // Input area
             Surface(
-                tonalElevation = 4.dp,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier
+                        .padding(horizontal = Dimens.spacingMd, vertical = Dimens.spacingSm),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = { Text("Ask something...") },
+                        placeholder = { Text("Ask about blood donation...") },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        )
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                        shape = RoundedCornerShape(Dimens.cardRadius),
+                        maxLines = 4,
+                        enabled = !isGenerating
                     )
-                    IconButton(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                chatMessages.add(ChatMessage(messageText, true))
-                                val userMsg = messageText.lowercase()
-                                messageText = ""
-                                // Mock AI logic
-                                val response = when {
-                                    userMsg.contains("eligibility") -> "You are eligible to donate if you are healthy, weigh over 50kg, and haven't donated in the last 90 days."
-                                    userMsg.contains("benefit") -> "Donating blood can help lower the risk of cancer and heart disease, and it saves lives!"
-                                    else -> "I can assist you with donation eligibility, benefits, and how to use this app. Please ask related questions."
-                                }
-                                chatMessages.add(ChatMessage(response, false))
-                            }
-                        }
+                    Spacer(modifier = Modifier.width(Dimens.spacingSm))
+                    FilledIconButton(
+                        onClick = { sendMessage(messageText) },
+                        enabled = messageText.isNotBlank() && !isGenerating,
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier.size(44.dp)
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "Send",
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
@@ -105,24 +291,68 @@ fun AiChatbotScreen(onBack: () -> Unit) {
 
 @Composable
 fun ChatBubble(message: ChatMessage) {
-    val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val color = if (message.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (message.isUser) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-    val shape = if (message.isUser) {
-        RoundedCornerShape(16.dp, 16.dp, 0.dp, 16.dp)
+    val isUser = message.isUser
+    val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
+
+    val bubbleColor = when {
+        message.isError -> MaterialTheme.colorScheme.errorContainer
+        isUser -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = when {
+        message.isError -> MaterialTheme.colorScheme.onErrorContainer
+        isUser -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val bubbleShape = if (isUser) {
+        RoundedCornerShape(Dimens.cardRadius, Dimens.cardRadius, 4.dp, Dimens.cardRadius)
     } else {
-        RoundedCornerShape(16.dp, 16.dp, 16.dp, 0.dp)
+        RoundedCornerShape(Dimens.cardRadius, Dimens.cardRadius, Dimens.cardRadius, 4.dp)
     }
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Box(
-            modifier = Modifier
-                .clip(shape)
-                .background(color)
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-                .widthIn(max = 280.dp)
+        Surface(
+            color = bubbleColor,
+            shape = bubbleShape,
+            modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Text(text = message.text, color = textColor, fontSize = 14.sp)
+            Text(
+                text = message.text,
+                color = textColor,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = Dimens.cardPadding, vertical = Dimens.spacingMd)
+            )
+        }
+    }
+}
+
+@Composable
+fun LoadingBubble() {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(Dimens.cardRadius, Dimens.cardRadius, Dimens.cardRadius, 4.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = Dimens.cardPadding, vertical = Dimens.spacingMd),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(3) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    )
+                }
+                Spacer(modifier = Modifier.width(Dimens.spacingXs))
+                Text(
+                    "Thinking...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

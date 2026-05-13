@@ -12,6 +12,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.raktaseva.app.data.model.BloodRequest
 import com.raktaseva.app.ui.screens.home.EmergencyRequestItem
+import com.raktaseva.app.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,13 +52,13 @@ fun RequestsScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
+                .padding(horizontal = Dimens.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(Dimens.cardSpacing),
+            contentPadding = PaddingValues(top = Dimens.spacingSm, bottom = Dimens.screenVertical)
         ) {
             if (isLoading) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(Dimens.spacingHuge), contentAlignment = androidx.compose.ui.Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
@@ -67,7 +68,7 @@ fun RequestsScreen() {
                         "No active requests available.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 16.dp)
+                        modifier = Modifier.padding(vertical = Dimens.spacingLg)
                     )
                 }
             } else {

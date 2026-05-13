@@ -53,6 +53,7 @@ object LocalUserState {
     val notificationsEnabled = mutableStateOf(true)
     val locationEnabled = mutableStateOf(true)
     val darkThemeEnabled = mutableStateOf(false)
+    val themeMode = mutableStateOf("system") // "system", "light", "dark"
     
     fun clear() {
         isLoggedIn.value = false
@@ -69,5 +70,6 @@ object LocalUserState {
         notificationsEnabled.value = true
         locationEnabled.value = true
         darkThemeEnabled.value = false
+        themeMode.value = "system"
     }
 }

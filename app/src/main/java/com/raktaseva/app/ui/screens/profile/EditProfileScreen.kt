@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.raktaseva.app.ui.state.LocalUserState
 import com.raktaseva.app.ui.state.DonationRecord
+import com.raktaseva.app.ui.theme.Dimens
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,7 +79,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp)
+                .padding(Dimens.screenHorizontal)
         ) {
             OutlinedTextField(
                 value = name,
@@ -238,7 +239,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                     }
                 },
                 enabled = canSave && !isSaving,
-                modifier = Modifier.fillMaxWidth().height(56.dp)
+                modifier = Modifier.fillMaxWidth().height(Dimens.buttonHeight)
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
