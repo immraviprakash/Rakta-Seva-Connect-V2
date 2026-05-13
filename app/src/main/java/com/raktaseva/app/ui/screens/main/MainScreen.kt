@@ -20,6 +20,7 @@ sealed class BottomNavScreen(val route: String, val label: String, val icon: Ima
     object Home : BottomNavScreen("home", "Home", Icons.Default.Home)
     object Donors : BottomNavScreen("donors", "Donors", Icons.Default.Search)
     object Requests : BottomNavScreen("requests", "Requests", Icons.Default.List)
+    object Notifications : BottomNavScreen("notifications", "Alerts", Icons.Default.Notifications)
     object Profile : BottomNavScreen("profile", "Profile", Icons.Default.Person)
 }
 
@@ -37,6 +38,7 @@ fun MainScreen(
         BottomNavScreen.Home,
         BottomNavScreen.Donors,
         BottomNavScreen.Requests,
+        BottomNavScreen.Notifications,
         BottomNavScreen.Profile
     )
 
@@ -65,7 +67,7 @@ fun MainScreen(
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.primary,
                             selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = Color(0xFFFFEBEE),
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -84,6 +86,7 @@ fun MainScreen(
             }
             composable(BottomNavScreen.Donors.route) { DonorsScreen() }
             composable(BottomNavScreen.Requests.route) { RequestsScreen() }
+            composable(BottomNavScreen.Notifications.route) { com.raktaseva.app.ui.screens.notifications.NotificationsScreen() }
             composable(BottomNavScreen.Profile.route) { 
                 ProfileScreen(
                     onChatClick = onNavigateToChat,

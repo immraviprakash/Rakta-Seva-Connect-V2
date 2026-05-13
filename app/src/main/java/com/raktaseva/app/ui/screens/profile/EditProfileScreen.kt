@@ -98,7 +98,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 isError = showAgeError,
                 trailingIcon = {
                     if (isAgeValid) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = "Valid Age", tint = Color(0xFF4CAF50))
+                        Icon(Icons.Default.CheckCircle, contentDescription = "Valid Age", tint = MaterialTheme.colorScheme.tertiary)
                     } else if (showAgeError) {
                         Icon(Icons.Default.Clear, contentDescription = "Invalid Age", tint = MaterialTheme.colorScheme.error)
                     }
@@ -106,7 +106,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 supportingText = {
                     if (age.isNotEmpty()) {
                         if (isAgeValid) {
-                            Text("18+ required for blood donation", color = Color(0xFF4CAF50))
+                            Text("18+ required for blood donation", color = MaterialTheme.colorScheme.tertiary)
                         } else {
                             Text("18+ required for blood donation", color = MaterialTheme.colorScheme.error)
                         }

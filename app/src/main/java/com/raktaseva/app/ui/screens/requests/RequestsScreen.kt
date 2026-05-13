@@ -12,11 +12,12 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.raktaseva.app.data.model.BloodRequest
 import com.raktaseva.app.ui.screens.home.EmergencyRequestItem
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RequestsScreen() {
-    val requests = remember { mutableStateListOf<BloodRequest>() }
+    var requests by remember { mutableStateOf(emptyList<BloodRequest>()) }
     var isLoading by remember { mutableStateOf(true) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -32,13 +33,7 @@ fun RequestsScreen() {
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    requests.clear()
-                    for (doc in snapshot.documents) {
-                        val request = doc.toObject(BloodRequest::class.java)
-                        if (request != null) {
-                            requests.add(request)
-                        }
-                    }
+                    requests = snapshot.documents.mapNotNull { it.toObject(BloodRequest::class.java) }
                     isLoading = false
                 }
             }
@@ -76,7 +71,7 @@ fun RequestsScreen() {
                     )
                 }
             } else {
-                items(requests) { request ->
+                items(requests, key = { it.requestId }) { request ->
                     EmergencyRequestItem(
                         request = request,
                         showSnackbar = { msg ->

@@ -14,9 +14,11 @@ import com.raktaseva.app.navigation.AppNavigation
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prefs = getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        com.raktaseva.app.ui.state.LocalUserState.darkThemeEnabled.value = prefs.getBoolean("dark_theme", false)
         enableEdgeToEdge()
         setContent {
-            RaktaSevaTheme {
+            RaktaSevaTheme(darkTheme = com.raktaseva.app.ui.state.LocalUserState.darkThemeEnabled.value) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

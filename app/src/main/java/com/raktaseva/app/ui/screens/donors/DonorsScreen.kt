@@ -27,7 +27,9 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun DonorsScreen() {
     var searchQuery by remember { mutableStateOf("") }
-    val donors = remember { mutableStateListOf<UserProfile>() }
+    var showEligibleOnly by remember { mutableStateOf(false) }
+    var showCompatibleOnly by remember { mutableStateOf(false) }
+    var donors by remember { mutableStateOf(emptyList<UserProfile>()) }
     var isLoading by remember { mutableStateOf(true) }
 
     DisposableEffect(Unit) {
@@ -40,12 +42,9 @@ fun DonorsScreen() {
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    donors.clear()
-                    for (doc in snapshot.documents) {
+                    donors = snapshot.documents.mapNotNull { doc ->
                         val donor = doc.toObject(UserProfile::class.java)
-                        if (donor != null && donor.uid != LocalUserState.uid.value) {
-                            donors.add(donor)
-                        }
+                        if (donor != null && donor.uid != LocalUserState.uid.value) donor else null
                     }
                     isLoading = false
                 }
@@ -55,6 +54,14 @@ fun DonorsScreen() {
 
     // Filter logic
     val filteredDonors = donors.filter { donor ->
+        if (showEligibleOnly && !isDonorEligible(donor.lastDonationDate)) return@filter false
+        if (showCompatibleOnly) {
+            val userGroup = LocalUserState.bloodGroup.value
+            if (userGroup.isNotBlank() && !BloodCompatibility.isCompatibleDonor(donorGroup = donor.bloodGroup, neededGroup = userGroup)) {
+                return@filter false
+            }
+        }
+
         val query = searchQuery.trim()
         if (query.isEmpty()) return@filter true
         
@@ -63,15 +70,13 @@ fun DonorsScreen() {
         // If query looks like a blood group (e.g. "A+", "O-"), use compatibility matching
         val isBloodGroupQuery = query.uppercase() in listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")
         val matchesBloodGroup = if (isBloodGroupQuery) {
-            // "If request needs A+: Show only A+, A-, O+, O-"
-            // This means donor must be compatible with the needed group (query)
             BloodCompatibility.isCompatibleDonor(donorGroup = donor.bloodGroup, neededGroup = query)
         } else {
             donor.bloodGroup.equals(query, ignoreCase = true)
         }
         
         matchesName || matchesBloodGroup
-    }
+    }.sortedByDescending { isDonorEligible(it.lastDonationDate) }
 
     Scaffold(
         topBar = {
@@ -91,6 +96,22 @@ fun DonorsScreen() {
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = showEligibleOnly,
+                    onClick = { showEligibleOnly = !showEligibleOnly },
+                    label = { Text("Eligible Only") }
+                )
+                FilterChip(
+                    selected = showCompatibleOnly,
+                    onClick = { showCompatibleOnly = !showCompatibleOnly },
+                    label = { Text("Compatible Only") }
+                )
+            }
             
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
@@ -106,7 +127,7 @@ fun DonorsScreen() {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(filteredDonors) { donor ->
+                    items(filteredDonors, key = { it.uid }) { donor ->
                         DonorCard(donor)
                     }
                 }
@@ -116,7 +137,7 @@ fun DonorsScreen() {
 }
 
 @Composable
-fun DonorCard(donor: UserProfile) {
+fun DonorCard(donor: UserProfile, showContact: Boolean = false) {
     val isEligible = isDonorEligible(donor.lastDonationDate)
     
     Card(
@@ -144,17 +165,28 @@ fun DonorCard(donor: UserProfile) {
                 Spacer(modifier = Modifier.height(4.dp))
                 
                 if (isEligible) {
-                    Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp)) {
-                        Text("Eligible Donor", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
+                        Text("Eligible Donor", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                 } else {
-                    Surface(color = Color(0xFFFFEBEE), shape = RoundedCornerShape(4.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(4.dp)) {
                         Text("Cooldown Active", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                 }
             }
-            if (donor.mobileNumber.isNotBlank()) {
-                IconButton(onClick = { /* Contact logic */ }) {
+            if (showContact && donor.mobileNumber.isNotBlank()) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                IconButton(onClick = { 
+                    try {
+                        val number = if (donor.mobileNumber.startsWith("+")) donor.mobileNumber else "+91${donor.mobileNumber}"
+                        val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                            data = android.net.Uri.parse("tel:$number")
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "Cannot open dialer", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) {
                     Icon(Icons.Default.Phone, contentDescription = "Contact", tint = MaterialTheme.colorScheme.primary)
                 }
             }

@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(onNavigateToRequest: () -> Unit) {
-    val requests = remember { mutableStateListOf<BloodRequest>() }
+    var requests by remember { mutableStateOf(emptyList<BloodRequest>()) }
     var isLoading by remember { mutableStateOf(true) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -76,13 +76,7 @@ fun HomeScreen(onNavigateToRequest: () -> Unit) {
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    requests.clear()
-                    for (doc in snapshot.documents) {
-                        val request = doc.toObject(BloodRequest::class.java)
-                        if (request != null) {
-                            requests.add(request)
-                        }
-                    }
+                    requests = snapshot.documents.mapNotNull { it.toObject(BloodRequest::class.java) }
                     isLoading = false
                 }
             }
@@ -151,7 +145,7 @@ fun HomeScreen(onNavigateToRequest: () -> Unit) {
                     )
                 }
             } else {
-                items(requests) { request ->
+                items(requests, key = { it.requestId }) { request ->
                     EmergencyRequestItem(
                         request = request,
                         showSnackbar = { msg ->
@@ -181,20 +175,20 @@ fun AvailabilityCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 "Donor Eligibility",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFFAAAAAA)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 statusText,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Light,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(20.dp))
             androidx.compose.material3.LinearProgressIndicator(
@@ -203,7 +197,7 @@ fun AvailabilityCard() {
                     .fillMaxWidth()
                     .height(6.dp),
                 color = progressColor,
-                trackColor = Color(0xFF333333),
+                trackColor = MaterialTheme.colorScheme.surface,
                 strokeCap = StrokeCap.Round
             )
             Row(
@@ -212,8 +206,8 @@ fun AvailabilityCard() {
                     .padding(top = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Last: $lastDate", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAAAAAA))
-                Text("Next: $nextDate", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAAAAAA))
+                Text("Last: $lastDate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Next: $nextDate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -221,10 +215,15 @@ fun AvailabilityCard() {
 
 @Composable
 fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit = {}) {
-    val context = LocalContext.current
     val currentUid = LocalUserState.uid.value
     var isAccepting by remember { mutableStateOf(false) }
+    val localAccepted = request.responders.contains(currentUid) || isAccepting
     var showCancelDialog by remember { mutableStateOf(false) }
+    var showCompatibleDonors by remember { mutableStateOf(false) }
+    var showResponders by remember { mutableStateOf(false) }
+    var isVisible by remember { mutableStateOf(true) }
+
+    if (!isVisible) return
 
     if (showCancelDialog) {
         AlertDialog(
@@ -234,9 +233,27 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
             confirmButton = {
                 TextButton(onClick = {
                     showCancelDialog = false
-                    FirebaseFirestore.getInstance().collection("requests")
-                        .document(request.requestId)
-                        .update("requestStatus", "cancelled")
+                    isVisible = false
+                    val db = FirebaseFirestore.getInstance()
+                    val batch = db.batch()
+                    val reqRef = db.collection("requests").document(request.requestId)
+                    batch.update(reqRef, "requestStatus", "archived")
+                    
+                    request.responders.forEach { responderUid ->
+                        val notifRef = db.collection("notifications").document()
+                        val notification = hashMapOf(
+                            "notificationId" to notifRef.id,
+                            "targetUserUid" to responderUid,
+                            "title" to "Request Cancelled",
+                            "message" to "An emergency request you accepted was cancelled.",
+                            "type" to "cancelled",
+                            "relatedRequestId" to request.requestId,
+                            "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                            "isRead" to false
+                        )
+                        batch.set(notifRef, notification)
+                    }
+                    batch.commit()
                 }) {
                     Text("Confirm Cancel", color = MaterialTheme.colorScheme.error)
                 }
@@ -268,16 +285,40 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Surface(
-                            color = Color(0xFFFFEBEE),
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                "Urgency: ${request.urgencyLevel}",
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.error,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    "Urgency: ${request.urgencyLevel}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                            val statusLabel = when (request.requestStatus) {
+                                "active" -> if (request.donorResponsesCount > 0) "Accepted" else "Awaiting"
+                                "fulfilled" -> "Completed"
+                                "archived" -> "Archived"
+                                else -> "Active"
+                            }
+                            val statusColor = when (statusLabel) {
+                                "Awaiting", "Active" -> MaterialTheme.colorScheme.errorContainer
+                                "Accepted" -> MaterialTheme.colorScheme.primaryContainer
+                                "Completed" -> MaterialTheme.colorScheme.tertiaryContainer
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                            Surface(
+                                color = statusColor,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    statusLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                         Text(
                             "Responses: ${request.donorResponsesCount}",
@@ -304,34 +345,52 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                     if (request.donorResponsesCount > 0) {
                         Button(
                             onClick = {
-                                FirebaseFirestore.getInstance().collection("requests")
-                                    .document(request.requestId)
-                                    .update("requestStatus", "fulfilled")
+                                isVisible = false
+                                val db = FirebaseFirestore.getInstance()
+                                val batch = db.batch()
+                                val reqRef = db.collection("requests").document(request.requestId)
+                                batch.update(reqRef, "requestStatus", "archived")
+                                
+                                request.responders.forEach { responderUid ->
+                                    val notifRef = db.collection("notifications").document()
+                                    val notification = hashMapOf(
+                                        "notificationId" to notifRef.id,
+                                        "targetUserUid" to responderUid,
+                                        "title" to "Request Archived",
+                                        "message" to "The emergency request you accepted has been archived.",
+                                        "type" to "archived",
+                                        "relatedRequestId" to request.requestId,
+                                        "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                        "isRead" to false
+                                    )
+                                    batch.set(notifRef, notification)
+                                }
+                                batch.commit()
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                         ) {
-                            Text("Mark Fulfilled", fontWeight = FontWeight.Bold)
+                            Text("Archive Request", fontWeight = FontWeight.Bold)
                         }
                         OutlinedButton(
-                            onClick = { showSnackbar("This request already has donor responses.") },
+                            onClick = { showResponders = !showResponders },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Cancel Request", fontWeight = FontWeight.Bold)
+                            Text(if (showResponders) "Hide Donors" else "View Donors", fontWeight = FontWeight.Bold)
                         }
                     } else {
                         OutlinedButton(
-                            onClick = { },
+                            onClick = { showCompatibleDonors = !showCompatibleDonors },
                             modifier = Modifier.weight(1f),
-                            enabled = false,
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Your Request", fontWeight = FontWeight.Bold)
+                            Text(if (showCompatibleDonors) "Hide Match" else "Match Donors", fontWeight = FontWeight.Bold)
                         }
                         OutlinedButton(
                             onClick = { showCancelDialog = true },
@@ -344,50 +403,64 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         }
                     }
                 } else {
-                    Button(
-                        onClick = { 
-                            if (currentUid.isEmpty()) return@Button
-                            isAccepting = true
-                            val db = FirebaseFirestore.getInstance()
-                            val docRef = db.collection("requests").document(request.requestId)
-                            db.runTransaction { transaction ->
-                                val snapshot = transaction.get(docRef)
-                                val reqUid = snapshot.getString("requesterUid")
-                                if (reqUid == currentUid) {
-                                    throw com.google.firebase.firestore.FirebaseFirestoreException(
-                                        "Cannot accept your own request.", 
-                                        com.google.firebase.firestore.FirebaseFirestoreException.Code.ABORTED
-                                    )
-                                }
-                                val responders = snapshot.get("responders") as? List<String> ?: emptyList()
-                                if (!responders.contains(currentUid)) {
-                                    val newResponders = responders + currentUid
-                                    transaction.update(docRef, "responders", newResponders)
-                                    val count = snapshot.getLong("donorResponsesCount") ?: 0
-                                    transaction.update(docRef, "donorResponsesCount", count + 1)
-                                }
-                            }.addOnSuccessListener {
-                                isAccepting = false
-                                Toast.makeText(context, "Request Accepted!", Toast.LENGTH_SHORT).show()
-                            }.addOnFailureListener {
-                                isAccepting = false
-                                Toast.makeText(context, "Failed to accept", Toast.LENGTH_SHORT).show()
+                    if (localAccepted) {
+                        Surface(
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                Text("Accepted by You", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !request.responders.contains(currentUid) && !isAccepting,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF212121))
-                    ) {
-                        if (isAccepting) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text(if (request.responders.contains(currentUid)) "Accepted" else "Accept", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { 
+                                if (currentUid.isEmpty() || request.requesterUid == currentUid) return@Button
+                                isAccepting = true
+                                val db = FirebaseFirestore.getInstance()
+                                val docRef = db.collection("requests").document(request.requestId)
+                                val batch = db.batch()
+                                
+                                batch.update(docRef, "responders", com.google.firebase.firestore.FieldValue.arrayUnion(currentUid))
+                                batch.update(docRef, "donorResponsesCount", com.google.firebase.firestore.FieldValue.increment(1))
+                                
+                                val notifRef = db.collection("notifications").document()
+                                val notification = hashMapOf(
+                                    "notificationId" to notifRef.id,
+                                    "targetUserUid" to request.requesterUid,
+                                    "title" to "Donor Accepted",
+                                    "message" to "${LocalUserState.name.value} accepted your emergency request for ${request.bloodGroup} blood.",
+                                    "type" to "accepted",
+                                    "relatedRequestId" to request.requestId,
+                                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                    "isRead" to false
+                                )
+                                batch.set(notifRef, notification)
+                                
+                                batch.commit().addOnSuccessListener {
+                                    isAccepting = false
+                                    showSnackbar("Request Accepted!")
+                                }.addOnFailureListener {
+                                    isAccepting = false
+                                    showSnackbar("Failed to accept")
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !localAccepted && !isAccepting,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            if (isAccepting) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Accept", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            }
                         }
                     }
                     OutlinedButton(
                         onClick = { 
-                            Toast.makeText(context, "Notes: ${request.additionalNotes}", Toast.LENGTH_LONG).show()
+                            showSnackbar("Notes: ${request.additionalNotes}")
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp),
@@ -396,6 +469,194 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         Text("Details", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
+            }
+
+            androidx.compose.animation.AnimatedVisibility(visible = showCompatibleDonors) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Divider(color = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Compatible Donors (Auto-Matched)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CompatibleDonorsList(neededBloodGroup = request.bloodGroup)
+                }
+            }
+
+            androidx.compose.animation.AnimatedVisibility(visible = showResponders) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Divider(color = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Accepted Donors",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AcceptedDonorsList(request = request)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AcceptedDonorsList(request: BloodRequest) {
+    val responders = request.responders
+    var donors by remember { mutableStateOf(emptyList<com.raktaseva.app.data.model.UserProfile>()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    DisposableEffect(responders) {
+        if (responders.isEmpty()) {
+            isLoading = false
+            return@DisposableEffect onDispose {}
+        }
+        val db = FirebaseFirestore.getInstance()
+        
+        // Firestore whereIn accepts max 10 elements.
+        val chunks = responders.chunked(10)
+        val listeners = chunks.map { chunk ->
+            db.collection("users")
+                .whereIn("uid", chunk)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        isLoading = false
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val newDonors = snapshot.documents.mapNotNull { it.toObject(com.raktaseva.app.data.model.UserProfile::class.java) }
+                        donors = (donors.filter { d -> newDonors.none { it.uid == d.uid } } + newDonors).sortedBy { it.fullName }
+                        isLoading = false
+                    }
+                }
+        }
+        
+        onDispose {
+            listeners.forEach { it.remove() }
+        }
+    }
+
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        }
+    } else if (donors.isEmpty()) {
+        Text("No donor details available.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            donors.forEach { donor ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    com.raktaseva.app.ui.screens.donors.DonorCard(donor, showContact = (request.requesterUid == LocalUserState.uid.value))
+                    if (request.requesterUid == LocalUserState.uid.value && request.requestStatus == "active") {
+                        val isContacted = request.contactedDonors.contains(donor.uid)
+                        val isCompleted = request.completedDonors.contains(donor.uid)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            if (isCompleted) {
+                                Text("Donation Completed", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
+                            } else {
+                                if (!isContacted) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val db = FirebaseFirestore.getInstance()
+                                            val batch = db.batch()
+                                            batch.update(db.collection("requests").document(request.requestId), "contactedDonors", request.contactedDonors + donor.uid)
+                                            val notifRef = db.collection("notifications").document()
+                                            batch.set(notifRef, hashMapOf(
+                                                "notificationId" to notifRef.id,
+                                                "targetUserUid" to donor.uid,
+                                                "title" to "Requester Contacted You",
+                                                "message" to "${LocalUserState.name.value} has marked that they contacted you.",
+                                                "type" to "contacted",
+                                                "relatedRequestId" to request.requestId,
+                                                "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                                "isRead" to false
+                                            ))
+                                            batch.commit()
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                                    ) { Text("Mark Contacted") }
+                                } else {
+                                    Text("Contacted", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+                                }
+                                Button(
+                                    onClick = {
+                                        val db = FirebaseFirestore.getInstance()
+                                        val batch = db.batch()
+                                        val reqRef = db.collection("requests").document(request.requestId)
+                                        batch.update(reqRef, "completedDonors", request.completedDonors + donor.uid)
+                                        batch.update(reqRef, "requestStatus", "archived")
+                                        val notifRef = db.collection("notifications").document()
+                                        batch.set(notifRef, hashMapOf(
+                                            "notificationId" to notifRef.id,
+                                            "targetUserUid" to donor.uid,
+                                            "title" to "Donation Completed",
+                                            "message" to "Thank you! The requester has confirmed your donation.",
+                                            "type" to "completed",
+                                            "relatedRequestId" to request.requestId,
+                                            "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                            "isRead" to false
+                                        ))
+                                        batch.commit()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                                ) { Text("Donation Received") }
+                            }
+                        }
+                    } else if (request.requestStatus == "archived" && request.completedDonors.contains(donor.uid)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            Text("Donation Completed", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CompatibleDonorsList(neededBloodGroup: String) {
+    var donors by remember { mutableStateOf(emptyList<com.raktaseva.app.data.model.UserProfile>()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    DisposableEffect(neededBloodGroup) {
+        val db = FirebaseFirestore.getInstance()
+        val listener = db.collection("users")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    isLoading = false
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val newDonors = snapshot.documents.mapNotNull { doc ->
+                        val donor = doc.toObject(com.raktaseva.app.data.model.UserProfile::class.java)
+                        if (donor != null && donor.uid != LocalUserState.uid.value && com.raktaseva.app.utils.BloodCompatibility.isCompatibleDonor(donorGroup = donor.bloodGroup, neededGroup = neededBloodGroup)) {
+                            donor
+                        } else null
+                    }
+                    donors = newDonors.sortedWith(compareByDescending { com.raktaseva.app.ui.screens.donors.isDonorEligible(it.lastDonationDate) })
+                    isLoading = false
+                }
+            }
+        onDispose { listener.remove() }
+    }
+
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        }
+    } else if (donors.isEmpty()) {
+        Text("No compatible donors found nearby.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            donors.take(5).forEach { donor ->
+                com.raktaseva.app.ui.screens.donors.DonorCard(donor, showContact = false)
             }
         }
     }

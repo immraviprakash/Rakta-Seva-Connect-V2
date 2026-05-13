@@ -32,19 +32,19 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFFFB4AB),
-    secondary = Color(0xFFFFDAD6),
-    tertiary = Color(0xFF8DE39F),
-    background = Color(0xFF161212),
-    surface = Color(0xFF211A1A),
-    onPrimary = Color(0xFF690005),
-    onSecondary = Color(0xFF410002),
-    onTertiary = Color(0xFF003914),
-    onBackground = Color(0xFFFFEDEA),
-    onSurface = Color(0xFFFFEDEA),
-    outline = Color(0xFF5E4A48),
-    surfaceVariant = Color(0xFF332625),
-    onSurfaceVariant = Color(0xFFE7CFCB)
+    primary = Color(0xFFED4245), // Deep crimson/red
+    secondary = Color(0xFFF26567),
+    tertiary = Color(0xFF4CAF50), // Success Green
+    background = Color(0xFF1E1F22), // Soft charcoal background
+    surface = Color(0xFF2B2D31), // Layered dark surface
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White,
+    onBackground = Color(0xFFF2F3F5), // Primary readable text
+    onSurface = Color(0xFFDBDEE1), // Primary surface text
+    outline = Color(0xFF3F4147), // Subtle elevation contrast
+    surfaceVariant = Color(0xFF313338), // Lighter surface
+    onSurfaceVariant = Color(0xFFB5BAC1) // Muted grayscale hierarchy
 )
 
 @Composable

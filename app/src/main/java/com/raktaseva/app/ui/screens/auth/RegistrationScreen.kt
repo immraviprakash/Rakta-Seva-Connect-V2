@@ -134,7 +134,28 @@ fun RegistrationScreen(
             ) {
                 Button(
                     onClick = { 
-                        if (step < 3) {
+                        if (step == 1) {
+                            isLoading = true
+                            @Suppress("DEPRECATION")
+                            FirebaseAuth.getInstance().fetchSignInMethodsForEmail(email)
+                                .addOnCompleteListener { task ->
+                                    isLoading = false
+                                    if (task.isSuccessful) {
+                                        val isNewUser = task.result?.signInMethods?.isEmpty() ?: true
+                                        if (isNewUser) {
+                                            step++
+                                        } else {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("This email is already registered. Try logging in instead.")
+                                            }
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(task.exception?.message ?: "Failed to verify email")
+                                        }
+                                    }
+                                }
+                        } else if (step < 3) {
                             step++ 
                         } else {
                             isLoading = true
@@ -371,7 +392,7 @@ fun RegistrationScreen(
                         isError = showAgeError,
                         trailingIcon = {
                             if (isAgeValid) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Valid Age", tint = Color(0xFF4CAF50))
+                                Icon(Icons.Default.CheckCircle, contentDescription = "Valid Age", tint = MaterialTheme.colorScheme.tertiary)
                             } else if (showAgeError) {
                                 Icon(Icons.Default.Clear, contentDescription = "Invalid Age", tint = MaterialTheme.colorScheme.error)
                             }
@@ -379,7 +400,7 @@ fun RegistrationScreen(
                         supportingText = {
                             if (age.isNotEmpty()) {
                                 if (isAgeValid) {
-                                    Text("18+ required for blood donation", color = Color(0xFF4CAF50))
+                                    Text("18+ required for blood donation", color = MaterialTheme.colorScheme.tertiary)
                                 } else {
                                     Text("18+ required for blood donation", color = MaterialTheme.colorScheme.error)
                                 }

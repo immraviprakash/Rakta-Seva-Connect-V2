@@ -11,11 +11,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.raktaseva.app.ui.state.LocalUserState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -57,8 +59,21 @@ fun SettingsScreen(onBack: () -> Unit) {
                 label = "Dark Theme",
                 description = "Enable dark mode for the app",
                 checked = LocalUserState.darkThemeEnabled.value,
-                onCheckedChange = { LocalUserState.darkThemeEnabled.value = it }
+                onCheckedChange = { 
+                    LocalUserState.darkThemeEnabled.value = it
+                    val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+                    prefs.edit().putBoolean("dark_theme", it).apply()
+                }
             )
+            
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+            
+            Text("About", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Rakta-Seva Connect", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            Text("Version 1.0.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Emergency blood donation coordination platform.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

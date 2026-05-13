@@ -1,5 +1,8 @@
 package com.raktaseva.app.ui.screens.auth
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.raktaseva.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -38,28 +41,14 @@ fun WelcomeScreen(
             Spacer(modifier = Modifier.height(32.dp))
             
             // Graphic/Logo area
-            Box(
+            Image(
+                painter = painterResource(id = R.drawable.ic_rakta_seva_logo_transparent),
+                contentDescription = "Rakta-Seva Connect Logo",
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 modifier = Modifier
-                    .size(160.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.FavoriteBorder,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(64.dp)
-                    )
-                }
-            }
+                    .fillMaxWidth(0.55f)
+                    .padding(vertical = 24.dp)
+            )
             
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

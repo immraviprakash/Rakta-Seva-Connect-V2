@@ -16,5 +16,7 @@ data class BloodRequest(
     val createdAt: Timestamp = Timestamp.now(),
     val requestStatus: String = "active",
     val donorResponsesCount: Int = 0,
-    val responders: List<String> = emptyList()
+    val responders: List<String> = emptyList(),
+    val contactedDonors: List<String> = emptyList(),
+    val completedDonors: List<String> = emptyList()
 )

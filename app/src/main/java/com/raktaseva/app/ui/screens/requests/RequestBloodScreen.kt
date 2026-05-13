@@ -171,8 +171,8 @@ fun RequestBloodScreen(onBack: () -> Unit) {
             Surface(
                 onClick = { /* AI Generator logic */ },
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFFE3F2FD),
-                contentColor = Color(0xFF1976D2),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Row(
@@ -239,9 +239,9 @@ fun RequestBloodScreen(onBack: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 if (isSubmitting) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
                 } else {
-                    Text("Post Emergency Request", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text("Post Emergency Request", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimary)
                 }
             }
             
