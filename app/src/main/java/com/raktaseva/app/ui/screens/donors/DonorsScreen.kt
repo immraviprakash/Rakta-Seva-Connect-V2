@@ -212,9 +212,9 @@ fun DonorCard(donor: UserProfile, showContact: Boolean = false, embedded: Boolea
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(Dimens.cardRadius),
-            elevation = CardDefaults.cardElevation(defaultElevation = Dimens.cardElevation),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isEligible) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                containerColor = if (isEligible) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
             )
         ) {
             content()

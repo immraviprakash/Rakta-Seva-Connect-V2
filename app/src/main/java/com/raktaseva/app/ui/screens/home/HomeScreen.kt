@@ -281,9 +281,9 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Dimens.cardRadius),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = Dimens.cardElevation)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(Dimens.cardPadding)) {
             Row(
