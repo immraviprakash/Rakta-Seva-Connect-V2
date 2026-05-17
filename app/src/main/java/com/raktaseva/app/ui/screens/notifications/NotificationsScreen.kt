@@ -1,5 +1,6 @@
 package com.raktaseva.app.ui.screens.notifications
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -85,7 +86,13 @@ fun NotificationsScreen() {
 @Composable
 fun NotificationCard(notification: Notification) {
     val db = FirebaseFirestore.getInstance()
-    
+
+    val cardColor = if (notification.isRead) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+    }
+
     Card(
         onClick = {
             if (!notification.isRead) {
@@ -94,10 +101,10 @@ fun NotificationCard(notification: Notification) {
         },
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (notification.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+            containerColor = cardColor
         ),
         shape = RoundedCornerShape(Dimens.cardRadius),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (notification.isRead) 0.dp else Dimens.cardElevation)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = Dimens.cardPadding, vertical = Dimens.spacingMd),
@@ -105,12 +112,11 @@ fun NotificationCard(notification: Notification) {
         ) {
             // Unread indicator dot
             if (!notification.isRead) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary,
+                Box(
                     modifier = Modifier
                         .size(8.dp)
                         .offset(y = 6.dp)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50))
                 ) {}
                 Spacer(modifier = Modifier.width(Dimens.spacingMd))
             }

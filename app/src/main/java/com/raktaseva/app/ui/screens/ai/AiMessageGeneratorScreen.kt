@@ -19,11 +19,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.google.ai.client.generativeai.GenerativeModel
-import com.raktaseva.app.BuildConfig
+import com.raktaseva.app.data.api.GroqMessage
+import com.raktaseva.app.data.api.GroqRepository
 import com.raktaseva.app.ui.state.LocalUserState
 import com.raktaseva.app.ui.theme.Dimens
 import kotlinx.coroutines.launch
+
+private const val MESSAGE_SYSTEM_PROMPT = """You are Rakta-Seva AI Assistant — a supportive and medically-aware message generator for the Rakta-Seva Connect blood donation app.
+
+Your task is to generate concise, emotionally impactful messages for blood donation coordination. You can generate:
+- Emergency blood request messages for social media/WhatsApp
+- Donor appreciation messages
+- Blood donation awareness content
+- Supportive healthcare responses
+
+Guidelines:
+- Keep messages under 150 words unless asked otherwise
+- Be urgent but professional for emergency requests
+- Include relevant hashtags for social media messages
+- Do NOT include phone numbers or hospital names (user will add those)
+- Make content shareable and emotionally impactful
+- Use a calm, supportive, and beginner-friendly tone"""
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,23 +50,13 @@ fun AiMessageGeneratorScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    val generativeModel = remember {
-        try {
-            GenerativeModel(
-                modelName = "gemini-1.5-flash",
-                apiKey = BuildConfig.GEMINI_API_KEY
-            )
-        } catch (e: Exception) { null }
-    }
-
     fun generateMessage() {
         isLoading = true
         errorMessage = null
         coroutineScope.launch {
-            try {
-                val bloodGroup = LocalUserState.bloodGroup.value
-                val name = LocalUserState.name.value
-                val prompt = """Generate an urgent blood donation request message for social media/WhatsApp.
+            val bloodGroup = LocalUserState.bloodGroup.value
+            val name = LocalUserState.name.value
+            val userPrompt = """Generate an urgent blood donation request message for social media/WhatsApp.
 
 Details:
 - Blood group needed: $bloodGroup
@@ -65,19 +71,24 @@ Requirements:
 - Do NOT include any phone numbers or hospital names (user will add those)
 - Make it shareable and emotionally impactful"""
 
-                val response = generativeModel?.generateContent(prompt)
-                val text = response?.text?.trim()
+            val messages = listOf(
+                GroqMessage(role = "system", content = MESSAGE_SYSTEM_PROMPT),
+                GroqMessage(role = "user", content = userPrompt)
+            )
 
-                if (text.isNullOrBlank()) {
-                    errorMessage = "Couldn't generate a message. Try again."
-                } else {
-                    generatedMessage = text
-                }
-            } catch (e: Exception) {
-                errorMessage = "Failed to generate. Please check your connection."
-            } finally {
-                isLoading = false
+            val result = GroqRepository.chat(
+                messages = messages,
+                temperature = 0.8,
+                maxTokens = 512
+            )
+
+            result.onSuccess { text ->
+                generatedMessage = text
+            }.onFailure { error ->
+                errorMessage = error.message ?: "Failed to generate. Please try again."
             }
+
+            isLoading = false
         }
     }
 

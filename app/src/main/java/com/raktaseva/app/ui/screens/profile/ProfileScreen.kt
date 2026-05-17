@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -321,7 +322,7 @@ fun ProfileMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label
     Surface(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
-        color = MaterialTheme.colorScheme.surface
+        color = Color.Transparent
     ) {
         Row(
             modifier = Modifier.padding(horizontal = Dimens.cardPadding, vertical = Dimens.spacingMd),

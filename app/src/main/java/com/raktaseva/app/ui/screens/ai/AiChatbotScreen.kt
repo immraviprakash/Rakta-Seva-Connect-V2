@@ -20,8 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.google.ai.client.generativeai.GenerativeModel
-import com.raktaseva.app.BuildConfig
+import com.raktaseva.app.data.api.GroqMessage
+import com.raktaseva.app.data.api.GroqRepository
 import com.raktaseva.app.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
@@ -79,15 +79,13 @@ fun AiChatbotScreen(onBack: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Initialize Gemini model
-    val generativeModel = remember {
-        try {
-            GenerativeModel(
-                modelName = "gemini-1.5-flash",
-                apiKey = BuildConfig.GEMINI_API_KEY
-            )
-        } catch (e: Exception) {
-            null
+    // Conversation history for Groq API (system + user/assistant messages)
+    val conversationHistory = remember { mutableStateListOf<GroqMessage>() }
+
+    // Initialize conversation with system prompt
+    LaunchedEffect(Unit) {
+        if (conversationHistory.isEmpty()) {
+            conversationHistory.add(GroqMessage(role = "system", content = SYSTEM_PROMPT))
         }
     }
 
@@ -118,69 +116,43 @@ fun AiChatbotScreen(onBack: () -> Unit) {
         messageText = ""
         isGenerating = true
 
+        // Add user message to conversation history
+        conversationHistory.add(GroqMessage(role = "user", content = userMessage))
+
         // Add loading indicator
         chatMessages.add(ChatMessage("", isUser = false, isLoading = true))
 
         coroutineScope.launch {
-            try {
-                if (generativeModel == null) {
-                    // Remove loading
-                    chatMessages.removeAll { it.isLoading }
-                    chatMessages.add(ChatMessage("AI service is currently unavailable. Please check your configuration and try again.", isUser = false, isError = true))
-                    isGenerating = false
-                    return@launch
+            val result = GroqRepository.chat(
+                messages = conversationHistory.toList()
+            )
+
+            // Remove loading indicator
+            chatMessages.removeAll { it.isLoading }
+
+            result.onSuccess { responseText ->
+                chatMessages.add(ChatMessage(responseText, isUser = false))
+                // Add assistant response to conversation history for context
+                conversationHistory.add(GroqMessage(role = "assistant", content = responseText))
+
+                // Trim conversation history to prevent token overflow (keep system + last 20 messages)
+                if (conversationHistory.size > 21) {
+                    val system = conversationHistory.first()
+                    val recent = conversationHistory.takeLast(20)
+                    conversationHistory.clear()
+                    conversationHistory.add(system)
+                    conversationHistory.addAll(recent)
                 }
-
-                // Build conversation context with system prompt
-                val fullPrompt = buildString {
-                    appendLine(SYSTEM_PROMPT)
-                    appendLine()
-                    appendLine("--- Conversation ---")
-                    // Include recent conversation history for context (last 10 messages)
-                    val recentMessages = chatMessages.filter { !it.isLoading }.takeLast(10)
-                    for (msg in recentMessages) {
-                        if (msg.isUser) {
-                            appendLine("User: ${msg.text}")
-                        } else if (!msg.isError) {
-                            appendLine("Assistant: ${msg.text}")
-                        }
-                    }
-                    appendLine()
-                    appendLine("Respond to the user's latest message naturally and helpfully.")
+            }.onFailure { error ->
+                val errorMsg = error.message ?: "Something went wrong. Please try again."
+                chatMessages.add(ChatMessage(errorMsg, isUser = false, isError = true))
+                // Remove the failed user message from history so it doesn't pollute context
+                if (conversationHistory.lastOrNull()?.role == "user") {
+                    conversationHistory.removeLastOrNull()
                 }
-
-                val response = generativeModel.generateContent(fullPrompt)
-                val responseText = response.text?.trim()
-
-                // Remove loading indicator
-                chatMessages.removeAll { it.isLoading }
-
-                if (responseText.isNullOrBlank()) {
-                    chatMessages.add(ChatMessage("I couldn't generate a response. Please try rephrasing your question.", isUser = false, isError = true))
-                } else {
-                    chatMessages.add(ChatMessage(responseText, isUser = false))
-                }
-            } catch (e: Exception) {
-                // Remove loading indicator
-                chatMessages.removeAll { it.isLoading }
-
-                val errorMessage = when {
-                    e.message?.contains("API key", ignoreCase = true) == true -> 
-                        "API key issue. Please verify the Gemini API key configuration."
-                    e.message?.contains("network", ignoreCase = true) == true ||
-                    e.message?.contains("connect", ignoreCase = true) == true ||
-                    e.message?.contains("timeout", ignoreCase = true) == true -> 
-                        "Unable to connect. Please check your internet connection and try again."
-                    e.message?.contains("quota", ignoreCase = true) == true ||
-                    e.message?.contains("rate", ignoreCase = true) == true -> 
-                        "Rate limit reached. Please wait a moment and try again."
-                    else -> 
-                        "Something went wrong. Please try again."
-                }
-                chatMessages.add(ChatMessage(errorMessage, isUser = false, isError = true))
-            } finally {
-                isGenerating = false
             }
+
+            isGenerating = false
         }
     }
 
@@ -192,7 +164,7 @@ fun AiChatbotScreen(onBack: () -> Unit) {
                     Column {
                         Text("AI Assistant", fontWeight = FontWeight.Bold)
                         Text(
-                            if (isGenerating) "Thinking..." else "Powered by Gemini",
+                            if (isGenerating) "Thinking..." else "Powered by Groq",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isGenerating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )

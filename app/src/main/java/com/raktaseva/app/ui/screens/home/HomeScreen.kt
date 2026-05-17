@@ -1,6 +1,7 @@
 package com.raktaseva.app.ui.screens.home
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -298,15 +298,15 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.error,
-                                shape = RoundedCornerShape(8.dp)
+                            Box(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
                                 Text(
                                     "Urgency: ${request.urgencyLevel}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                             val statusLabel = when (request.requestStatus) {
@@ -321,14 +321,14 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                                 "Completed" -> MaterialTheme.colorScheme.tertiaryContainer
                                 else -> MaterialTheme.colorScheme.surfaceVariant
                             }
-                            Surface(
-                                color = statusColor,
-                                shape = RoundedCornerShape(8.dp)
+                            Box(
+                                modifier = Modifier
+                                    .background(statusColor, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
                                 Text(
                                     statusLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             }
                         }
@@ -416,14 +416,14 @@ fun EmergencyRequestItem(request: BloodRequest, showSnackbar: (String) -> Unit =
                     }
                 } else {
                     if (localAccepted) {
-                        Surface(
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                            shape = RoundedCornerShape(Dimens.buttonRadius)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(Dimens.buttonRadius)),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
                         ) {
-                            Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-                                Text("Accepted by You", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Text("Accepted by You", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
                         Button(
@@ -560,7 +560,7 @@ fun AcceptedDonorsList(request: BloodRequest) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             donors.forEach { donor ->
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    com.raktaseva.app.ui.screens.donors.DonorCard(donor, showContact = (request.requesterUid == LocalUserState.uid.value))
+                    com.raktaseva.app.ui.screens.donors.DonorCard(donor, showContact = (request.requesterUid == LocalUserState.uid.value), embedded = true)
                     if (request.requesterUid == LocalUserState.uid.value && request.requestStatus == "active") {
                         val isContacted = request.contactedDonors.contains(donor.uid)
                         val isCompleted = request.completedDonors.contains(donor.uid)
@@ -668,7 +668,7 @@ fun CompatibleDonorsList(neededBloodGroup: String) {
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             donors.take(5).forEach { donor ->
-                com.raktaseva.app.ui.screens.donors.DonorCard(donor, showContact = false)
+                com.raktaseva.app.ui.screens.donors.DonorCard(donor, showContact = false, embedded = true)
             }
         }
     }

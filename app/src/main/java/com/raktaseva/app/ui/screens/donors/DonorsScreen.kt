@@ -1,5 +1,6 @@
 package com.raktaseva.app.ui.screens.donors
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -143,19 +144,12 @@ fun DonorsScreen() {
 }
 
 @Composable
-fun DonorCard(donor: UserProfile, showContact: Boolean = false) {
+fun DonorCard(donor: UserProfile, showContact: Boolean = false, embedded: Boolean = false) {
     val isEligible = isDonorEligible(donor.lastDonationDate)
     
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(Dimens.cardRadius),
-        elevation = CardDefaults.cardElevation(defaultElevation = Dimens.cardElevation),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isEligible) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
-    ) {
+    val content: @Composable () -> Unit = {
         Row(
-            modifier = Modifier.padding(Dimens.cardPadding),
+            modifier = Modifier.padding(if (embedded) PaddingValues(vertical = Dimens.spacingSm) else PaddingValues(Dimens.cardPadding)),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
             BloodGroupBadge(group = donor.bloodGroup, size = 40)
@@ -173,12 +167,20 @@ fun DonorCard(donor: UserProfile, showContact: Boolean = false) {
                 Spacer(modifier = Modifier.height(Dimens.spacingXs))
                 
                 if (isEligible) {
-                    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(6.dp)) {
-                        Text("Eligible", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Eligible", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
                     }
                 } else {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(6.dp)) {
-                        Text("Cooldown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Cooldown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -198,6 +200,24 @@ fun DonorCard(donor: UserProfile, showContact: Boolean = false) {
                     Icon(Icons.Default.Phone, contentDescription = "Contact", tint = MaterialTheme.colorScheme.primary)
                 }
             }
+        }
+    }
+
+    if (embedded) {
+        // Render inline without Card wrapper — for use inside another Card
+        Column(modifier = Modifier.fillMaxWidth()) {
+            content()
+        }
+    } else {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(Dimens.cardRadius),
+            elevation = CardDefaults.cardElevation(defaultElevation = Dimens.cardElevation),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isEligible) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            content()
         }
     }
 }

@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.google.firebase.firestore.FirebaseFirestore
+import com.raktaseva.app.data.api.GroqMessage
+import com.raktaseva.app.data.api.GroqRepository
 import com.raktaseva.app.data.model.BloodRequest
 import com.raktaseva.app.ui.state.LocalUserState
 import java.util.UUID
@@ -42,6 +44,7 @@ fun RequestBloodScreen(onBack: () -> Unit) {
     var urgency by remember { mutableStateOf("Medium") }
     var notes by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
+    var isGeneratingAi by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val canSubmit = bloodGroup.isNotBlank() && hospital.trim().isNotBlank() && (units.toIntOrNull() ?: 0) > 0
     val snackbarHostState = remember { SnackbarHostState() }
@@ -161,16 +164,61 @@ fun RequestBloodScreen(onBack: () -> Unit) {
             
             OutlinedTextField(
                 value = notes,
-                onValueChange = { if (it.length <= 200) notes = it },
+                onValueChange = { if (it.length <= 500) notes = it },
                 label = { Text("Additional Notes") },
-                supportingText = { Text("${notes.length}/200") },
+                supportingText = { Text("${notes.length}/500") },
                 modifier = Modifier.fillMaxWidth().height(120.dp),
                 maxLines = 5,
                 shape = RoundedCornerShape(12.dp)
             )
             
             Surface(
-                onClick = { /* AI Generator logic */ },
+                onClick = {
+                    if (isGeneratingAi) return@Surface
+                    if (bloodGroup.isBlank()) {
+                        coroutineScope.launch { snackbarHostState.showSnackbar("Please select a blood group first.") }
+                        return@Surface
+                    }
+                    isGeneratingAi = true
+                    coroutineScope.launch {
+                        val prompt = buildString {
+                            appendLine("Generate a short, urgent emergency blood donation request message (under 120 words).")
+                            appendLine()
+                            appendLine("Details:")
+                            appendLine("- Blood group needed: $bloodGroup")
+                            if (hospital.isNotBlank()) appendLine("- Hospital/Location: ${hospital.trim()}")
+                            if (units.isNotBlank()) appendLine("- Units required: $units")
+                            appendLine("- Urgency level: $urgency")
+                            if (notes.isNotBlank()) appendLine("- Context from requester: ${notes.trim()}")
+                            appendLine()
+                            appendLine("Requirements:")
+                            appendLine("- Make it emotionally urgent but professional")
+                            appendLine("- Include a clear call to action for donors")
+                            appendLine("- Keep it human-sounding and shareable")
+                            appendLine("- Do NOT add hashtags, phone numbers, or markdown formatting")
+                            appendLine("- Output ONLY the message text, nothing else")
+                        }
+
+                        val messages = listOf(
+                            GroqMessage(role = "system", content = "You are a concise medical emergency message writer for the Rakta-Seva Connect blood donation app. Write short, urgent, respectful donor request messages. Output only the message text."),
+                            GroqMessage(role = "user", content = prompt)
+                        )
+
+                        val result = GroqRepository.chat(
+                            messages = messages,
+                            temperature = 0.7,
+                            maxTokens = 256
+                        )
+
+                        result.onSuccess { generatedText ->
+                            notes = generatedText.take(500)
+                        }.onFailure { error ->
+                            snackbarHostState.showSnackbar(error.message ?: "Failed to generate message. Please try again.")
+                        }
+
+                        isGeneratingAi = false
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.tertiaryContainer,
                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -181,9 +229,21 @@ fun RequestBloodScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
+                    if (isGeneratingAi) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Generate Urgent Message with AI", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        if (isGeneratingAi) "Generating..." else "Generate Urgent Message with AI",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
             }
             
