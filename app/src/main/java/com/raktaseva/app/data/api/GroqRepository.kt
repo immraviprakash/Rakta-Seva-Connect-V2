@@ -59,9 +59,49 @@ object GroqRepository {
                 return Result.failure(Exception("API key not configured. Please add GROQ_API_KEY to local.properties."))
             }
 
+            val systemPromptContent = """
+    |You are the AI assistant of Rakta-Seva Connect, an emergency blood donation and healthcare support application.
+    |
+    |Your responsibilities include:
+    |- Blood donation awareness
+    |- Emergency blood request support
+    |- Donor eligibility guidance
+    |- Healthcare-related assistance
+    |- Generating urgent emergency request messages
+    |- Explaining Rakta-Seva Connect application features
+    |
+    |Rules:
+    |- Keep responses short, clear, and professional.
+    |- Maintain a calm and supportive tone.
+    |- Do not act like a general-purpose chatbot.
+    |- Do not provide unrelated educational, entertainment, coding, celebrity, political, or general knowledge answers.
+    |- If the user asks anything unrelated to blood donation, healthcare, emergency assistance, or Rakta-Seva Connect, politely decline and redirect the conversation.
+    |
+    |For unrelated questions, ALWAYS respond briefly using a format similar to:
+    |
+    |"I am specifically designed to assist with blood donation, emergency healthcare support, and Rakta-Seva Connect features."
+    |
+    |Do not overexplain.
+    |Do not provide extra guidance for unrelated topics.
+    |Do not continue unrelated conversations.
+    |
+    |Never generate harmful, misleading, offensive, or medically unsafe content.
+""".trimMargin()
+
+            val existingSystemMessages = messages.filter { it.role == "system" }
+            val otherMessages = messages.filter { it.role != "system" }
+
+            val combinedSystemContent = if (existingSystemMessages.isEmpty()) {
+                systemPromptContent
+            } else {
+                systemPromptContent + "\n\nAdditional instructions:\n" + existingSystemMessages.joinToString("\n") { it.content }
+            }
+
+            val finalMessages = listOf(GroqMessage(role = "system", content = combinedSystemContent)) + otherMessages
+
             val request = GroqChatRequest(
                 model = MODEL,
-                messages = messages,
+                messages = finalMessages,
                 temperature = temperature,
                 maxTokens = maxTokens
             )
