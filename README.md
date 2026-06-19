@@ -130,23 +130,45 @@ graph TD
 
 ## 📱 Screenshots
 
-### Home Screen
-![Home Screen](home.png)
+## 📱 Screenshots
 
-### Donor Directory
-![Donor Directory](donor.png)
+<table>
+<tr>
+<td align="center">
+<b>Home</b><br>
+<img src="home.png" width="250"/>
+</td>
 
-### Request Workflow
-![Request Workflow](requests.png)
+<td align="center">
+<b>Donors</b><br>
+<img src="donor.png" width="250"/>
+</td>
+</tr>
 
-### Donation Verification
-![Donation Verification](verification.png)
+<tr>
+<td align="center">
+<b>Requests</b><br>
+<img src="requests.png" width="250"/>
+</td>
 
-### Notifications
-![Notifications](alerts.png)
+<td align="center">
+<b>Verification</b><br>
+<img src="verification.png" width="250"/>
+</td>
+</tr>
 
-### Profile
-![Profile](profile.png)
+<tr>
+<td align="center">
+<b>Notifications</b><br>
+<img src="alerts.png" width="250"/>
+</td>
+
+<td align="center">
+<b>Profile</b><br>
+<img src="profile.png" width="250"/>
+</td>
+</tr>
+</table>
 
 
 ---
