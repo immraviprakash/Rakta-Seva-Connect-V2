@@ -1,6 +1,7 @@
 package com.raktaseva.app.ui.screens.donors
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.RadioButton
+import androidx.compose.material.icons.filled.Send
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,20 +38,178 @@ fun DonorsScreen() {
     var donors by remember { mutableStateOf(emptyList<UserProfile>()) }
     var isLoading by remember { mutableStateOf(true) }
 
+    var activeRequests by remember { mutableStateOf(emptyList<com.raktaseva.app.data.model.BloodRequest>()) }
+    var selectedDonorForRequest by remember { mutableStateOf<UserProfile?>(null) }
+    var showRequestDialog by remember { mutableStateOf(false) }
+    var isFetchingRequests by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    fun handleRequestClick(donor: UserProfile) {
+        isFetchingRequests = true
+        val db = FirebaseFirestore.getInstance()
+        db.collection("requests")
+            .whereEqualTo("requesterUid", LocalUserState.uid.value)
+            .whereEqualTo("requestStatus", "active")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                isFetchingRequests = false
+                if (snapshot == null || snapshot.isEmpty) {
+                    Toast.makeText(context, "No active emergency requests found. Please create a request first.", Toast.LENGTH_LONG).show()
+                } else {
+                    val requestsList = snapshot.documents.mapNotNull { it.toObject(com.raktaseva.app.data.model.BloodRequest::class.java) }
+                    activeRequests = requestsList
+                    selectedDonorForRequest = donor
+                    showRequestDialog = true
+                }
+            }
+            .addOnFailureListener { e ->
+                isFetchingRequests = false
+                Toast.makeText(context, "Error checking requests: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    if (showRequestDialog && selectedDonorForRequest != null) {
+        val donorName = selectedDonorForRequest!!.fullName
+        val donorUid = selectedDonorForRequest!!.uid
+        
+        var selectedRequestIndex by remember { mutableStateOf(0) }
+        var isSendingDirectRequest by remember { mutableStateOf(false) }
+        
+        AlertDialog(
+            onDismissRequest = { showRequestDialog = false },
+            title = { Text("Send Donation Request") },
+            text = {
+                Column {
+                    if (activeRequests.size == 1) {
+                        val req = activeRequests[0]
+                        Text("Send a direct donation request to $donorName for blood group ${req.bloodGroup} at ${req.hospitalName}?")
+                    } else {
+                        Text("Select which active request to send to $donorName:")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        activeRequests.forEachIndexed { index, req ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(
+                                        if (selectedRequestIndex == index) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Unspecified,
+                                        shape = RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(8.dp)
+                                    .clickable { selectedRequestIndex = index },
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selectedRequestIndex == index,
+                                    onClick = { selectedRequestIndex = index }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("${req.bloodGroup} required at ${req.hospitalName}", fontWeight = FontWeight.Bold)
+                                    Text("Urgency: ${req.urgencyLevel} · Units: ${req.unitsRequired}")
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isSendingDirectRequest,
+                    onClick = {
+                        isSendingDirectRequest = true
+                        val selectedRequest = activeRequests[selectedRequestIndex]
+                        val db = FirebaseFirestore.getInstance()
+                        val patientUid = LocalUserState.uid.value
+
+                        db.collection("requests")
+                            .whereEqualTo("requesterUid", patientUid)
+                            .whereIn("status", listOf("pending", "accepted"))
+                            .get()
+                            .addOnSuccessListener { querySnapshot ->
+                                var hasActiveRequest = false
+                                if (querySnapshot != null) {
+                                    for (doc in querySnapshot.documents) {
+                                        val contacted = doc.get("contactedDonors") as? List<*>
+                                        val acceptedBy = doc.getString("acceptedByUid") ?: ""
+                                        if ((contacted != null && contacted.contains(donorUid)) || acceptedBy == donorUid) {
+                                            hasActiveRequest = true
+                                            break
+                                        }
+                                    }
+                                }
+                                if (hasActiveRequest) {
+                                    isSendingDirectRequest = false
+                                    showRequestDialog = false
+                                    Toast.makeText(context, "Request already exists and has been sent to the donor.", Toast.LENGTH_LONG).show()
+                                } else {
+                                    val notifRef = db.collection("notifications").document()
+                                    val notification = hashMapOf(
+                                        "notificationId" to notifRef.id,
+                                        "targetUserUid" to donorUid,
+                                        "senderUid" to patientUid,
+                                        "title" to "Direct Donation Request",
+                                        "message" to "${LocalUserState.name.value} has requested you to donate ${selectedRequest.bloodGroup} blood at ${selectedRequest.hospitalName}.",
+                                        "type" to "direct_request",
+                                        "relatedRequestId" to selectedRequest.requestId,
+                                        "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                        "isRead" to false
+                                    )
+                                    
+                                    val reqRef = db.collection("requests").document(selectedRequest.requestId)
+                                    val batch = db.batch()
+                                    batch.set(notifRef, notification)
+                                    batch.update(reqRef, "contactedDonors", com.google.firebase.firestore.FieldValue.arrayUnion(donorUid))
+                                    
+                                    batch.commit()
+                                        .addOnSuccessListener {
+                                            isSendingDirectRequest = false
+                                            showRequestDialog = false
+                                            Toast.makeText(context, "Request sent successfully!", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .addOnFailureListener { e ->
+                                            isSendingDirectRequest = false
+                                            Toast.makeText(context, "Failed to send request: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                        }
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                isSendingDirectRequest = false
+                                Toast.makeText(context, "Error checking active requests: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                ) {
+                    if (isSendingDirectRequest) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    } else {
+                        Text("Send Request")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRequestDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     DisposableEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
         val listener = db.collection("users")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .whereEqualTo("isAvailable", true)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     isLoading = false
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    donors = snapshot.documents.mapNotNull { doc ->
+                    val list = snapshot.documents.mapNotNull { doc ->
                         val donor = doc.toObject(UserProfile::class.java)
                         if (donor != null && donor.uid != LocalUserState.uid.value) donor else null
                     }
+                    donors = list.sortedByDescending { it.lastDonationDate }
                     isLoading = false
                 }
             }
@@ -131,11 +294,15 @@ fun DonorsScreen() {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = Dimens.screenHorizontal),
-                    verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.spacingLg),
                     contentPadding = PaddingValues(top = Dimens.spacingSm, bottom = Dimens.screenVertical)
                 ) {
                     items(filteredDonors, key = { it.uid }) { donor ->
-                        DonorCard(donor)
+                        DonorCard(
+                            donor = donor,
+                            showContact = true,
+                            onSendRequest = { handleRequestClick(it) }
+                        )
                     }
                 }
             }
@@ -144,60 +311,179 @@ fun DonorsScreen() {
 }
 
 @Composable
-fun DonorCard(donor: UserProfile, showContact: Boolean = false, embedded: Boolean = false) {
+fun DonorCard(
+    donor: UserProfile, 
+    showContact: Boolean = false, 
+    embedded: Boolean = false,
+    onSendRequest: (UserProfile) -> Unit = {}
+) {
     val isEligible = isDonorEligible(donor.lastDonationDate)
     
     val content: @Composable () -> Unit = {
         Row(
             modifier = Modifier.padding(if (embedded) PaddingValues(vertical = Dimens.spacingSm) else PaddingValues(Dimens.cardPadding)),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            verticalAlignment = androidx.compose.ui.Alignment.Top
         ) {
-            BloodGroupBadge(group = donor.bloodGroup, size = 40)
-            Spacer(modifier = Modifier.width(Dimens.spacingMd))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(donor.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(Dimens.spacingXxs))
-                
-                Text(
-                    if (donor.lastDonationDate.isNotBlank()) "Last: ${donor.lastDonationDate}" else "Last: Never",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(Dimens.spacingXs))
-                
-                if (isEligible) {
-                    Box(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Eligible", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Cooldown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Dimens.spacingMd)
+            ) {
+                // Top Section: Blood group badge left, large donor name right, plus eligibility badge
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    BloodGroupBadge(group = donor.bloodGroup, size = 40)
+                    Spacer(modifier = Modifier.width(Dimens.spacingMd))
+                    Column {
+                        Text(
+                            text = donor.fullName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(Dimens.spacingXxs))
+                        if (isEligible) {
+                            Box(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Eligible", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Cooldown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
                 }
-            }
-            if (showContact && donor.mobileNumber.isNotBlank()) {
-                val context = androidx.compose.ui.platform.LocalContext.current
-                IconButton(onClick = { 
-                    try {
-                        val number = if (donor.mobileNumber.startsWith("+")) donor.mobileNumber else "+91${donor.mobileNumber}"
-                        val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
-                            data = android.net.Uri.parse("tel:$number")
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        android.widget.Toast.makeText(context, "Cannot open dialer", android.widget.Toast.LENGTH_SHORT).show()
+
+                // Information Section: Vertically stacked elements to prevent awkward horizontal wrapping
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm)) {
+                    Column {
+                        Text(
+                            text = "Last Donation",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = if (donor.lastDonationDate.isNotBlank()) donor.lastDonationDate else "Never",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                }) {
-                    Icon(Icons.Default.Phone, contentDescription = "Contact", tint = MaterialTheme.colorScheme.primary)
+                    if (donor.mobileNumber.isNotBlank()) {
+                        Column {
+                            Text(
+                                text = "Phone",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = donor.mobileNumber,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                }
+            }
+
+            if (showContact) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Spacer(modifier = Modifier.width(Dimens.spacingMd))
+                Column(
+                    modifier = Modifier.width(115.dp),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
+                    horizontalAlignment = androidx.compose.ui.Alignment.End
+                ) {
+                    if (donor.mobileNumber.isNotBlank()) {
+                        Button(
+                            onClick = { 
+                                try {
+                                    val number = if (donor.mobileNumber.startsWith("+")) donor.mobileNumber else "+91${donor.mobileNumber}"
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                                        data = android.net.Uri.parse("tel:$number")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Cannot open dialer", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                              ) {
+                                Icon(Icons.Default.Phone, contentDescription = "Call", modifier = Modifier.size(16.dp))
+                                Text("Call", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                    
+                    Button(
+                        onClick = {
+                            val waNum = donor.mobileNumber.trim()
+                            if (waNum.isBlank()) {
+                                Toast.makeText(context, "Phone number is missing.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                try {
+                                    val cleanPhone = waNum.filter { it.isDigit() }
+                                    val url = "https://wa.me/$cleanPhone"
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                        data = android.net.Uri.parse(url)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Cannot open WhatsApp", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        ),
+                        shape = RoundedCornerShape(Dimens.buttonRadius),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Send, contentDescription = "WhatsApp", modifier = Modifier.size(16.dp))
+                            Text("WhatsApp", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    if (donor.uid != LocalUserState.uid.value) {
+                        OutlinedButton(
+                            onClick = { onSendRequest(donor) },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(Dimens.buttonRadius),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                        ) {
+                            Text("Request", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
             }
         }
@@ -224,22 +510,9 @@ fun DonorCard(donor: UserProfile, showContact: Boolean = false, embedded: Boolea
 
 fun isDonorEligible(lastDonationDate: String): Boolean {
     if (lastDonationDate.isBlank()) return true
-    return try {
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        val lastDate = sdf.parse(lastDonationDate) ?: return true
-        val diffInMillies = Math.abs(Date().time - lastDate.time)
-        val days = TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS)
-        days >= 90
-    } catch (e: Exception) {
-        try {
-            // Check for format ddMMyyyy as used in RegistrationScreen
-            val sdf2 = SimpleDateFormat("ddMMyyyy", Locale.getDefault())
-            val lastDate2 = sdf2.parse(lastDonationDate) ?: return true
-            val diffInMillies2 = Math.abs(Date().time - lastDate2.time)
-            val days2 = TimeUnit.DAYS.convert(diffInMillies2, TimeUnit.MILLISECONDS)
-            days2 >= 90
-        } catch (e2: Exception) {
-            true
-        }
-    }
+    val parsedDate = com.raktaseva.app.ui.state.LocalUserState.tryParseDate(lastDonationDate.trim()) ?: return true
+    if (parsedDate.after(Date())) return false
+    val diffInMillies = Date().time - parsedDate.time
+    val days = TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS)
+    return days >= 90
 }

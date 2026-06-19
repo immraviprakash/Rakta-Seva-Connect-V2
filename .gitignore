@@ -8,3 +8,5 @@ coverage/
 !.env.example
 local.properties
 .gradle/
+.idea/
+window_dump.xml

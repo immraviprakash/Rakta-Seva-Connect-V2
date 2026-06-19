@@ -8,5 +8,6 @@ data class UserProfile(
     val bloodGroup: String = "",
     val gender: String = "",
     val age: String = "",
-    val lastDonationDate: String = ""
+    val lastDonationDate: String = "",
+    val isAvailable: Boolean = false
 )

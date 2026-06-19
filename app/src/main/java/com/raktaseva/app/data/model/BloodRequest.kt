@@ -18,5 +18,8 @@ data class BloodRequest(
     val donorResponsesCount: Int = 0,
     val responders: List<String> = emptyList(),
     val contactedDonors: List<String> = emptyList(),
-    val completedDonors: List<String> = emptyList()
+    val completedDonors: List<String> = emptyList(),
+    val acceptedByUid: String = "",
+    val acceptedByName: String = "",
+    val status: String = "pending"
 )

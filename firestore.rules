@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global helper function for authentication check
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ==========================================
+    // 1. USERS COLLECTION
+    // ==========================================
+    match /users/{uid} {
+      // Any authenticated user can read profiles (necessary for showing donor/requester details)
+      allow read: if isAuthenticated();
+      
+      // Users can only create their own profile document
+      allow create: if isAuthenticated() 
+                    && request.auth.uid == uid
+                    && request.resource.data.uid == uid;
+      
+      // Users can update their own profile fully.
+      // Non-owners can never update another user's profile.
+      allow update: if isAuthenticated() && request.auth.uid == uid;
+                     
+      // Client-side deletion is not allowed to preserve coordination integrity
+      allow delete: if false; 
+    }
+
+    // ==========================================
+    // 2. REQUESTS COLLECTION
+    // ==========================================
+    match /requests/{requestId} {
+      // Authenticated users can read requests (required for realtime feed and history listeners)
+      allow read: if isAuthenticated();
+      
+      // Request Creation Rules
+      allow create: if isAuthenticated()
+                    && request.resource.data.requesterUid == request.auth.uid
+                    && request.resource.data.requestStatus == 'active'
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.unitsRequired is number
+                    && request.resource.data.unitsRequired > 0
+                    && request.resource.data.keys().hasAll(['requesterUid', 'bloodGroup', 'hospitalName', 'unitsRequired', 'requestStatus', 'status', 'createdAt']);
+
+      // Request Update Rules
+      allow update: if isAuthenticated() && (
+        
+        // CASE A: The Owner (Patient) is modifying their own request
+        (
+          resource.data.requesterUid == request.auth.uid
+          && request.resource.data.requesterUid == request.auth.uid // Cannot transfer ownership
+          && request.resource.data.requestStatus in ['active', 'completed', 'cancelled', 'archived', 'fulfilled']
+          && request.resource.data.status in ['pending', 'accepted', 'completed', 'rejected', 'cancelled']
+        )
+        ||
+        // CASE B: A Donor is interacting with the request (e.g., accepting/rejecting)
+        (
+          resource.data.requesterUid != request.auth.uid
+          && request.resource.data.requesterUid == resource.data.requesterUid // Cannot change owner
+          && request.resource.data.requestStatus == resource.data.requestStatus // Cannot alter lifecycle
+          && resource.data.status == 'pending'
+          && (
+            (request.resource.data.status == 'accepted' && request.resource.data.acceptedByUid == request.auth.uid) ||
+            (request.resource.data.status == 'rejected')
+          )
+          // They can ONLY modify responders, donorResponsesCount, acceptedByUid, acceptedByName, and status
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responders', 'donorResponsesCount', 'acceptedByUid', 'acceptedByName', 'status'])
+        )
+      );
+      
+      // Deletion is blocked; Requests should use the 'archived' or 'cancelled' status instead
+      allow delete: if false; 
+    }
+
+    // ==========================================
+    // 3. NOTIFICATIONS COLLECTION
+    // ==========================================
+    match /notifications/{notificationId} {
+      // Users can strictly read ONLY their own notifications
+      allow read: if isAuthenticated() 
+                  && resource.data.targetUserUid == request.auth.uid;
+      
+      // Authenticated users can create notifications (e.g., system triggering notification upon acceptance/completion)
+      allow create: if isAuthenticated()
+                    && request.resource.data.keys().hasAll(['targetUserUid', 'title', 'message', 'isRead'])
+                    && request.resource.data.isRead == false;
+      
+      // Users can ONLY update the 'isRead' state of their own notifications
+      allow update: if isAuthenticated() 
+                  && resource.data.targetUserUid == request.auth.uid
+                  && request.resource.data.targetUserUid == request.auth.uid // Cannot re-target
+                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+                    
+      // Users can delete their own notifications if they wish to clear them
+      allow delete: if isAuthenticated()
+                  && resource.data.targetUserUid == request.auth.uid;
+    }
+
+    // ==========================================
+    // 4. COOLDOWNS COLLECTION
+    // ==========================================
+    match /cooldowns/{cooldownId} {
+      // Allow any authenticated user to read cooldowns so they can check eligibility during donor search
+      allow read: if isAuthenticated();
+      
+      // Only the user themselves can write/manage their own cooldown document
+      allow write: if isAuthenticated() && cooldownId.startsWith(request.auth.uid);
+    }
+
+    // ==========================================
+    // 5. DONATIONS COLLECTION
+    // ==========================================
+    match /donations/{donationId} {
+      // Allow the donor to read their own donations history
+      allow read: if isAuthenticated() && resource.data.donorUid == request.auth.uid;
+      
+      // Only allow creation of a donation record if:
+      // 1. User is authenticated
+      // 2. The record references a valid donorUid and requestId
+      // 3. The user creating the record is the authorized requester of the associated request
+      // 4. The donorUid matches the donor who actually accepted the request
+      allow create: if isAuthenticated() 
+                    && request.resource.data.donorUid != null
+                    && request.resource.data.requestId != null
+                    && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.requesterUid == request.auth.uid
+                    && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.acceptedByUid == request.resource.data.donorUid;
+    }
+  }
+}

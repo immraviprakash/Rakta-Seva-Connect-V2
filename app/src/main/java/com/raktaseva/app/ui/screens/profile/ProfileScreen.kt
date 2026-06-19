@@ -37,10 +37,37 @@ fun ProfileScreen(
     var showMyRequestsSheet by remember { mutableStateOf(false) }
 
     if (showHistorySheet) {
+        var donationsList by remember { mutableStateOf(emptyList<DonationHistoryRecord>()) }
+        var isFetchingDonations by remember { mutableStateOf(true) }
+
+        DisposableEffect(Unit) {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val listener = db.collection("donations")
+                .whereEqualTo("donorUid", LocalUserState.uid.value)
+                .addSnapshotListener { snapshot, error ->
+                    isFetchingDonations = false
+                    if (error == null && snapshot != null) {
+                        val list = snapshot.documents.mapNotNull { doc ->
+                            val date = doc.getString("donationDate") ?: ""
+                            val recipient = doc.getString("recipientName") ?: ""
+                            val group = doc.getString("bloodGroup") ?: ""
+                            val units = doc.getLong("units")?.toInt() ?: 0
+                            val hospital = doc.getString("hospitalName") ?: ""
+                            val reqId = doc.getString("requestId") ?: ""
+                            val ts = doc.getTimestamp("createdAt")
+                            DonationHistoryRecord(date, recipient, group, units, hospital, reqId, ts)
+                        }
+                        donationsList = list.sortedWith(compareByDescending { it.createdAt?.seconds ?: 0L })
+                    }
+                }
+            onDispose { listener.remove() }
+        }
+
         ModalBottomSheet(onDismissRequest = { showHistorySheet = false }) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = Dimens.screenHorizontal, vertical = Dimens.spacingSm)
             ) {
                 Text(
@@ -49,10 +76,14 @@ fun ProfileScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = Dimens.spacingLg)
                 )
-                if (LocalUserState.donationHistory.isEmpty()) {
+                if (isFetchingDonations) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(Dimens.spacingLg), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else if (donationsList.isEmpty()) {
                     Text("No donations recorded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    LocalUserState.donationHistory.forEach { record ->
+                    donationsList.forEach { record ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -60,17 +91,12 @@ fun ProfileScreen(
                             shape = RoundedCornerShape(Dimens.cardRadius),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(Dimens.cardPadding),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(Dimens.spacingMd))
-                                Column {
-                                    Text(record.date, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                                    Text(record.hospital, style = MaterialTheme.typography.bodySmall)
-                                    Text(record.status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                }
+                            Column(modifier = Modifier.padding(Dimens.cardPadding)) {
+                                Text("Donation Date: ${record.date}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                Text("Recipient: ${record.recipient}", style = MaterialTheme.typography.bodyMedium)
+                                Text("Blood Group: ${record.bloodGroup}", style = MaterialTheme.typography.bodyMedium)
+                                Text("Units: ${record.units}", style = MaterialTheme.typography.bodyMedium)
+                                Text("Hospital: ${record.hospital}", style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
@@ -113,30 +139,79 @@ fun ProfileScreen(
                     Box(modifier = Modifier.fillMaxWidth().padding(Dimens.spacingLg), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                } else if (acceptedRequests.isEmpty()) {
-                    Text("No accepted requests found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
+                    val activeAccepted = acceptedRequests.filter { it.status == "accepted" }
+                    val completedDonations = acceptedRequests.filter { it.status == "completed" }
+
                     androidx.compose.foundation.lazy.LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm)
+                        verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
-                        items(acceptedRequests, key = { it.requestId }) { req ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(Dimens.cardRadius),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                            ) {
-                                Column(modifier = Modifier.padding(Dimens.cardPadding)) {
-                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                        Text(req.hospitalName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                                        Text(req.requestStatus.uppercase(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, color = if (req.requestStatus == "fulfilled") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                        if (activeAccepted.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "Active Accepted Requests",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(vertical = Dimens.spacingSm)
+                                )
+                            }
+                            items(activeAccepted, key = { it.requestId }) { req ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(Dimens.cardRadius),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(modifier = Modifier.padding(Dimens.cardPadding)) {
+                                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                            Text(req.hospitalName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                            Text(req.requestStatus.uppercase(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        }
+                                        Spacer(modifier = Modifier.height(Dimens.spacingXs))
+                                        Text("${req.requesterName} · ${req.bloodGroup} · ${req.unitsRequired} units", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        val dateStr = try {
+                                            java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(req.createdAt.toDate())
+                                        } catch (e: Exception) { "Unknown date" }
+                                        Text(dateStr, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Spacer(modifier = Modifier.height(Dimens.spacingXs))
-                                    Text("${req.requesterName} · ${req.bloodGroup} · ${req.unitsRequired} units", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    val dateStr = try {
-                                        java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(req.createdAt.toDate())
-                                    } catch (e: Exception) { "Unknown date" }
-                                    Text(dateStr, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
+                            }
+                        }
+
+                        if (completedDonations.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "Completed Donations",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(vertical = Dimens.spacingSm)
+                                )
+                            }
+                            items(completedDonations, key = { it.requestId }) { req ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(Dimens.cardRadius),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(modifier = Modifier.padding(Dimens.cardPadding)) {
+                                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                            Text(req.hospitalName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                            Text(req.requestStatus.uppercase(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        Spacer(modifier = Modifier.height(Dimens.spacingXs))
+                                        Text("${req.requesterName} · ${req.bloodGroup} · ${req.unitsRequired} units", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        val dateStr = try {
+                                            java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(req.createdAt.toDate())
+                                        } catch (e: Exception) { "Unknown date" }
+                                        Text(dateStr, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+
+                        if (activeAccepted.isEmpty() && completedDonations.isEmpty()) {
+                            item {
+                                Text("No accepted requests found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -335,3 +410,13 @@ fun ProfileMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label
         }
     }
 }
+
+data class DonationHistoryRecord(
+    val date: String,
+    val recipient: String,
+    val bloodGroup: String,
+    val units: Int,
+    val hospital: String,
+    val requestId: String,
+    val createdAt: com.google.firebase.Timestamp?
+)

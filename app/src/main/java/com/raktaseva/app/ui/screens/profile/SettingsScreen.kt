@@ -141,7 +141,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                         label = "Notifications",
                         description = "Receive alerts for blood requests nearby",
                         checked = LocalUserState.notificationsEnabled.value,
-                        onCheckedChange = { LocalUserState.notificationsEnabled.value = it }
+                        onCheckedChange = { checked ->
+                            LocalUserState.notificationsEnabled.value = checked
+                            val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("notifications_enabled", checked).apply()
+                        }
                     )
                     Divider(
                         modifier = Modifier.padding(horizontal = Dimens.cardPadding),
@@ -151,7 +155,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                         label = "Location Services",
                         description = "Use your location for nearby donors",
                         checked = LocalUserState.locationEnabled.value,
-                        onCheckedChange = { LocalUserState.locationEnabled.value = it }
+                        onCheckedChange = { checked ->
+                            LocalUserState.locationEnabled.value = checked
+                            val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("location_enabled", checked).apply()
+                        }
                     )
                 }
             }

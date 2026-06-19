@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 
+import com.raktaseva.app.ui.state.LocalUserState
+
 sealed class BottomNavScreen(val route: String, val label: String, val icon: ImageVector) {
     object Home : BottomNavScreen("home", "Home", Icons.Default.Home)
     object Donors : BottomNavScreen("donors", "Donors", Icons.Default.Search)
@@ -36,6 +38,60 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit
 ) {
     val navController = rememberNavController()
+    
+    DisposableEffect(LocalUserState.uid.value) {
+        val uid = LocalUserState.uid.value
+        if (uid.isEmpty()) return@DisposableEffect onDispose {}
+        
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val listener = db.collection("users").document(uid)
+            .addSnapshotListener { document, error ->
+                if (error == null && document != null && document.exists()) {
+                    LocalUserState.email.value = document.getString("email") ?: ""
+                    LocalUserState.phone.value = document.getString("mobileNumber") ?: ""
+                    LocalUserState.name.value = document.getString("fullName") ?: "User"
+                    LocalUserState.age.value = document.getString("age") ?: ""
+                    LocalUserState.gender.value = document.getString("gender") ?: ""
+                    LocalUserState.bloodGroup.value = document.getString("bloodGroup") ?: "O+"
+                    LocalUserState.isAvailable.value = document.getBoolean("isAvailable") ?: false
+                    
+                    val lastDate = document.getString("lastDonationDate") ?: ""
+                    LocalUserState.lastDonationDate.value = lastDate
+                    
+                    if (lastDate.isNotBlank() && LocalUserState.donationHistory.none { it.date == lastDate }) {
+                        LocalUserState.donationHistory.add(0, com.raktaseva.app.ui.state.DonationRecord(lastDate, "System Updated", "Completed"))
+                    }
+                }
+            }
+        onDispose {
+            listener.remove()
+        }
+    }
+
+    DisposableEffect(LocalUserState.uid.value) {
+        val uid = LocalUserState.uid.value
+        if (uid.isEmpty()) return@DisposableEffect onDispose {}
+        
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val listener = db.collection("requests")
+            .whereEqualTo("acceptedByUid", uid)
+            .whereEqualTo("status", "completed")
+            .addSnapshotListener { snapshot, error ->
+                if (error == null && snapshot != null && !snapshot.isEmpty) {
+                    val todayDbStr = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+                    if (LocalUserState.lastDonationDate.value != todayDbStr || LocalUserState.isAvailable.value) {
+                        db.collection("users").document(uid).update(
+                            "lastDonationDate", todayDbStr,
+                            "isAvailable", false
+                        )
+                    }
+                }
+            }
+        onDispose {
+            listener.remove()
+        }
+    }
+
     val items = listOf(
         BottomNavScreen.Home,
         BottomNavScreen.Donors,
@@ -90,7 +146,10 @@ fun MainScreen(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(BottomNavScreen.Home.route) { 
-                HomeScreen(onNavigateToRequest = onNavigateToRequest) 
+                HomeScreen(
+                    onNavigateToRequest = onNavigateToRequest,
+                    onNavigateToChat = onNavigateToChat
+                ) 
             }
             composable(BottomNavScreen.Donors.route) { DonorsScreen() }
             composable(BottomNavScreen.Requests.route) { RequestsScreen() }

@@ -15,6 +15,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,7 +31,60 @@ data class ChatMessage(
     val text: String,
     val isUser: Boolean,
     val isError: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val id: String = java.util.UUID.randomUUID().toString()
+)
+
+val ChatMessageListSaver = Saver<androidx.compose.runtime.snapshots.SnapshotStateList<ChatMessage>, List<Map<String, Any>>> (
+    save = { list ->
+        list.map { msg ->
+            mapOf(
+                "text" to msg.text,
+                "isUser" to msg.isUser,
+                "isError" to msg.isError,
+                "isLoading" to msg.isLoading,
+                "id" to msg.id
+            )
+        }
+    },
+    restore = { savedList ->
+        val snapshotList = mutableStateListOf<ChatMessage>()
+        savedList.forEach { map ->
+            snapshotList.add(
+                ChatMessage(
+                    text = map["text"] as String,
+                    isUser = map["isUser"] as Boolean,
+                    isError = map["isError"] as Boolean,
+                    isLoading = map["isLoading"] as Boolean,
+                    id = map["id"] as String
+                )
+            )
+        }
+        snapshotList
+    }
+)
+
+val GroqMessageListSaver = Saver<androidx.compose.runtime.snapshots.SnapshotStateList<GroqMessage>, List<Map<String, String>>> (
+    save = { list ->
+        list.map { msg ->
+            mapOf(
+                "role" to msg.role,
+                "content" to msg.content
+            )
+        }
+    },
+    restore = { savedList ->
+        val snapshotList = mutableStateListOf<GroqMessage>()
+        savedList.forEach { map ->
+            snapshotList.add(
+                GroqMessage(
+                    role = map["role"] as String,
+                    content = map["content"] as String
+                )
+            )
+        }
+        snapshotList
+    }
 )
 
 private const val SYSTEM_PROMPT = """You are Rakta-Seva AI Assistant — a supportive, calm, and medically-aware blood donation companion built into the Rakta-Seva Connect app.
@@ -72,15 +127,15 @@ Always respond in a warm, supportive tone. Use emoji sparingly (❤️ 🩸) whe
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiChatbotScreen(onBack: () -> Unit) {
-    var messageText by remember { mutableStateOf("") }
-    val chatMessages = remember { mutableStateListOf<ChatMessage>() }
+    var messageText by rememberSaveable { mutableStateOf("") }
+    val chatMessages = rememberSaveable(saver = ChatMessageListSaver) { mutableStateListOf<ChatMessage>() }
     var isGenerating by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Conversation history for Groq API (system + user/assistant messages)
-    val conversationHistory = remember { mutableStateListOf<GroqMessage>() }
+    val conversationHistory = rememberSaveable(saver = GroqMessageListSaver) { mutableStateListOf<GroqMessage>() }
 
     // Initialize conversation with system prompt
     LaunchedEffect(Unit) {
@@ -192,7 +247,7 @@ fun AiChatbotScreen(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(Dimens.spacingSm),
                 contentPadding = PaddingValues(vertical = Dimens.spacingMd)
             ) {
-                items(chatMessages, key = { chatMessages.indexOf(it) }) { msg ->
+                items(chatMessages, key = { it.id }) { msg ->
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 })

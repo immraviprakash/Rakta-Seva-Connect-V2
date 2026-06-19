@@ -24,18 +24,37 @@ object LocalUserState {
     val bloodGroup = mutableStateOf("O+")
     val lastDonationDate = mutableStateOf("")
     val intent = mutableStateOf("")
+    val isAvailable = mutableStateOf(false)
     val donationHistory = mutableStateListOf<DonationRecord>()
 
-    fun getDaysSinceLastDonation(): Long? {
-        if (lastDonationDate.value.isBlank()) return null
-        return try {
-            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-            val lastDate = sdf.parse(lastDonationDate.value) ?: return null
-            val diffInMillies = Math.abs(Date().time - lastDate.time)
-            TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS)
-        } catch (e: Exception) {
-            null
+    fun tryParseDate(dateStr: String): Date? {
+        val formats = listOf("dd/MM/yyyy", "ddMMyyyy")
+        for (format in formats) {
+            try {
+                val sdf = SimpleDateFormat(format, Locale.getDefault()).apply {
+                    isLenient = false
+                }
+                return sdf.parse(dateStr)
+            } catch (e: Exception) {
+                // Try next format
+            }
         }
+        return null
+    }
+
+    fun getDaysSinceLastDonation(): Long? {
+        val dateStr = lastDonationDate.value.trim()
+        if (dateStr.isBlank()) return null
+        
+        val parsedDate = tryParseDate(dateStr) ?: return null
+        
+        // If date is in the future, treat it as ineligible (return 0 days since donation)
+        if (parsedDate.after(Date())) {
+            return 0L
+        }
+        
+        val diffInMillies = Date().time - parsedDate.time
+        return TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS)
     }
 
     fun isEligibleToDonate(): Boolean {
@@ -66,6 +85,7 @@ object LocalUserState {
         bloodGroup.value = "O+"
         lastDonationDate.value = ""
         intent.value = ""
+        isAvailable.value = false
         donationHistory.clear()
         notificationsEnabled.value = true
         locationEnabled.value = true

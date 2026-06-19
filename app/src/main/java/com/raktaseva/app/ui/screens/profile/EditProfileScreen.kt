@@ -23,10 +23,20 @@ import com.raktaseva.app.ui.theme.Dimens
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalFocusManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(onBack: () -> Unit) {
+    val focusManager = LocalFocusManager.current
+    val nameFocusRequester = remember { FocusRequester() }
+    val ageFocusRequester = remember { FocusRequester() }
+    val lastDonationFocusRequester = remember { FocusRequester() }
+
     var name by remember { mutableStateOf(LocalUserState.name.value) }
     var age by remember { mutableStateOf(LocalUserState.age.value) }
     var bloodGroup by remember { mutableStateOf(LocalUserState.bloodGroup.value) }
@@ -34,7 +44,9 @@ fun EditProfileScreen(onBack: () -> Unit) {
 
     val isAgeValid = age.toIntOrNull()?.let { it >= 18 } ?: false
     val showAgeError = age.isNotEmpty() && !isAgeValid
-    val canSave = name.isNotBlank() && isAgeValid
+    val isDateValid = lastDonationDate.isEmpty() || (lastDonationDate.length == 8 && com.raktaseva.app.ui.state.LocalUserState.tryParseDate(lastDonationDate) != null)
+    val showDateError = lastDonationDate.isNotEmpty() && (lastDonationDate.length < 8 || com.raktaseva.app.ui.state.LocalUserState.tryParseDate(lastDonationDate) == null)
+    val canSave = name.isNotBlank() && isAgeValid && isDateValid
 
     val isEligible = LocalUserState.isEligibleToDonate()
     val daysUntilEligible = LocalUserState.getDaysUntilEligible()
@@ -48,7 +60,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                        val sdf = SimpleDateFormat("ddMMyyyy", Locale.getDefault())
                         lastDonationDate = sdf.format(Date(it))
                     }
                     showDatePicker = false
@@ -86,7 +98,11 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 onValueChange = { name = it },
                 label = { Text("Full Name") },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(nameFocusRequester),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { ageFocusRequester.requestFocus() })
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -94,8 +110,11 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 value = age,
                 onValueChange = { age = it.filter(Char::isDigit).take(3) },
                 label = { Text("Age") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { lastDonationFocusRequester.requestFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(ageFocusRequester),
                 isError = showAgeError,
                 trailingIcon = {
                     if (isAgeValid) {
@@ -150,27 +169,35 @@ fun EditProfileScreen(onBack: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(16.dp))
 
+
+
             OutlinedTextField(
                 value = lastDonationDate,
                 onValueChange = { input -> 
                     val filtered = input.filter { it.isDigit() }
                     if (filtered.length <= 8) lastDonationDate = filtered
                 },
-                label = { Text("Last Donation Date") },
+                label = { Text("Last Donation Date (Optional)") },
                 leadingIcon = { 
                     IconButton(onClick = { showDatePicker = true }, enabled = isEligible) {
                         Icon(Icons.Default.DateRange, contentDescription = "Select Date") 
                     }
                 },
                 enabled = isEligible,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
+                isError = showDateError,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(lastDonationFocusRequester),
                 visualTransformation = com.raktaseva.app.ui.screens.auth.DateTransformation(),
                 supportingText = {
                     if (!isEligible) {
                         Text("Not Eligible. Wait $daysUntilEligible days to update.", color = MaterialTheme.colorScheme.error)
+                    } else if (showDateError) {
+                        Text("Enter a valid complete date (DD/MM/YYYY) or clear it", color = MaterialTheme.colorScheme.error)
                     } else {
-                        Text("Update your last donation date.")
+                        Text("Update your last donation date (DD/MM/YYYY).")
                     }
                 }
             )
@@ -188,21 +215,38 @@ fun EditProfileScreen(onBack: () -> Unit) {
                             if (i == 1 || i == 3) append("/")
                         }
                     }
+                    
+                    val parsedDate = com.raktaseva.app.ui.state.LocalUserState.tryParseDate(formattedToSave)
+                    val isNewDateEligible = if (parsedDate == null) {
+                        true
+                    } else {
+                        if (parsedDate.after(java.util.Date())) {
+                            false
+                        } else {
+                            val diffInMillies = java.util.Date().time - parsedDate.time
+                            val days = java.util.concurrent.TimeUnit.DAYS.convert(diffInMillies, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            days >= 90
+                        }
+                    }
+                    val updatedIsAvailable = if (!isNewDateEligible) false else LocalUserState.isAvailable.value
+
                     val uid = LocalUserState.uid.value
                     if (uid.isNotEmpty()) {
                         val updates = mapOf(
                             "fullName" to name,
                             "age" to age,
                             "bloodGroup" to bloodGroup,
-                            "lastDonationDate" to formattedToSave
+                            "lastDonationDate" to formattedToSave,
+                            "isAvailable" to updatedIsAvailable
                         )
                         com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid)
-                            .update(updates)
+                            .set(updates, com.google.firebase.firestore.SetOptions.merge())
                             .addOnSuccessListener {
                                 isSaving = false
                                 LocalUserState.name.value = name
                                 LocalUserState.age.value = age
                                 LocalUserState.bloodGroup.value = bloodGroup
+                                LocalUserState.isAvailable.value = updatedIsAvailable
                                 
                                 if (formattedToSave != LocalUserState.lastDonationDate.value && formattedToSave.isNotBlank()) {
                                     LocalUserState.donationHistory.add(0, DonationRecord(formattedToSave, "Self Updated", "Completed"))
@@ -216,6 +260,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                                 LocalUserState.name.value = name
                                 LocalUserState.age.value = age
                                 LocalUserState.bloodGroup.value = bloodGroup
+                                LocalUserState.isAvailable.value = updatedIsAvailable
                                 
                                 if (formattedToSave != LocalUserState.lastDonationDate.value && formattedToSave.isNotBlank()) {
                                     LocalUserState.donationHistory.add(0, DonationRecord(formattedToSave, "Self Updated", "Completed"))
@@ -229,6 +274,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                         LocalUserState.name.value = name
                         LocalUserState.age.value = age
                         LocalUserState.bloodGroup.value = bloodGroup
+                        LocalUserState.isAvailable.value = updatedIsAvailable
                         
                         if (formattedToSave != LocalUserState.lastDonationDate.value && formattedToSave.isNotBlank()) {
                             LocalUserState.donationHistory.add(0, DonationRecord(formattedToSave, "Self Updated", "Completed"))

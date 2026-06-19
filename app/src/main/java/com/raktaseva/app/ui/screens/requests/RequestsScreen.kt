@@ -18,12 +18,13 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RequestsScreen() {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var requests by remember { mutableStateOf(emptyList<BloodRequest>()) }
     var isLoading by remember { mutableStateOf(true) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    DisposableEffect(Unit) {
+    DisposableEffect(com.raktaseva.app.ui.state.LocalUserState.bloodGroup.value) {
         val db = FirebaseFirestore.getInstance()
         val listener = db.collection("requests")
             .whereEqualTo("requestStatus", "active")
@@ -31,10 +32,18 @@ fun RequestsScreen() {
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     isLoading = false
+                    android.widget.Toast.makeText(context, "Error loading requests: ${error.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    requests = snapshot.documents.mapNotNull { it.toObject(BloodRequest::class.java) }
+                    val allRequests = snapshot.documents.mapNotNull { it.toObject(BloodRequest::class.java) }
+                    requests = allRequests.filter { request ->
+                        request.requesterUid == com.raktaseva.app.ui.state.LocalUserState.uid.value ||
+                        com.raktaseva.app.utils.BloodCompatibility.isCompatibleDonor(
+                            donorGroup = com.raktaseva.app.ui.state.LocalUserState.bloodGroup.value,
+                            neededGroup = request.bloodGroup
+                        )
+                    }
                     isLoading = false
                 }
             }
@@ -53,7 +62,7 @@ fun RequestsScreen() {
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = Dimens.screenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(Dimens.cardSpacing),
+            verticalArrangement = Arrangement.spacedBy(Dimens.spacingLg),
             contentPadding = PaddingValues(top = Dimens.spacingSm, bottom = Dimens.screenVertical)
         ) {
             if (isLoading) {

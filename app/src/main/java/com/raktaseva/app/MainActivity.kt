@@ -24,6 +24,10 @@ class MainActivity : ComponentActivity() {
         LocalUserState.themeMode.value = themeMode
         LocalUserState.darkThemeEnabled.value = prefs.getBoolean("dark_theme", false)
         
+        // Load notifications and location preferences (default: true)
+        LocalUserState.notificationsEnabled.value = prefs.getBoolean("notifications_enabled", true)
+        LocalUserState.locationEnabled.value = prefs.getBoolean("location_enabled", true)
+        
         enableEdgeToEdge()
         setContent {
             val isDark = resolveTheme(LocalUserState.themeMode.value)

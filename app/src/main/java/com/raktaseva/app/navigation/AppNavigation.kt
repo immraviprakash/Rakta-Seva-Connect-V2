@@ -8,7 +8,6 @@ import com.raktaseva.app.ui.state.LocalUserState
 import com.raktaseva.app.ui.screens.auth.SplashScreen
 import com.raktaseva.app.ui.screens.auth.WelcomeScreen
 import com.raktaseva.app.ui.screens.auth.LoginScreen
-import com.raktaseva.app.ui.screens.auth.OtpScreen
 import com.raktaseva.app.ui.screens.auth.RegistrationScreen
 import com.raktaseva.app.ui.screens.main.MainScreen
 
@@ -16,9 +15,6 @@ sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Welcome : Screen("welcome")
     object Login : Screen("login")
-    object Otp : Screen("otp/{phone}") {
-        fun createRoute(phone: String) = "otp/$phone"
-    }
     object Registration : Screen("registration")
     object Main : Screen("main")
     object RequestBlood : Screen("request_blood")
@@ -51,6 +47,7 @@ fun AppNavigation() {
                             LocalUserState.age.value = document.getString("age") ?: ""
                             LocalUserState.gender.value = document.getString("gender") ?: ""
                             LocalUserState.bloodGroup.value = document.getString("bloodGroup") ?: "O+"
+                            LocalUserState.isAvailable.value = document.getBoolean("isAvailable") ?: false
                             
                             val lastDate = document.getString("lastDonationDate") ?: ""
                             LocalUserState.lastDonationDate.value = lastDate
@@ -97,18 +94,7 @@ fun AppNavigation() {
                 onBack = { navController.popBackStack() }
             )
         }
-        composable(Screen.Otp.route) { backStackEntry ->
-            val phone = backStackEntry.arguments?.getString("phone") ?: ""
-            OtpScreen(
-                phone = phone,
-                onVerified = {
-                    navController.navigate(Screen.Main.route) {
-                        popUpTo(Screen.Welcome.route) { inclusive = true }
-                    }
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
+
         composable(Screen.Registration.route) {
             RegistrationScreen(
                 onComplete = {

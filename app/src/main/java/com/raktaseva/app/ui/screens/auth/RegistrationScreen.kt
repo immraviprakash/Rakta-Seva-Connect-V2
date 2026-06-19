@@ -43,6 +43,11 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalFocusManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +55,15 @@ fun RegistrationScreen(
     onComplete: () -> Unit,
     onBack: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+    val nameFocusRequester = remember { FocusRequester() }
+    val emailFocusRequester = remember { FocusRequester() }
+    val phoneFocusRequester = remember { FocusRequester() }
+    val passwordFocusRequester = remember { FocusRequester() }
+    val confirmPasswordFocusRequester = remember { FocusRequester() }
+    val ageFocusRequester = remember { FocusRequester() }
+    val lastDonationDateFocusRequester = remember { FocusRequester() }
+
     var step by remember { mutableIntStateOf(1) }
     
     // Step 1: Account Info
@@ -79,10 +93,12 @@ fun RegistrationScreen(
 
     val isAgeValid = age.toIntOrNull()?.let { it >= 18 } ?: false
     val showAgeError = age.isNotEmpty() && !isAgeValid
+    val isDateValid = lastDonationDate.isEmpty() || (lastDonationDate.length == 8 && com.raktaseva.app.ui.state.LocalUserState.tryParseDate(lastDonationDate) != null)
+    val showDateError = lastDonationDate.isNotEmpty() && (lastDonationDate.length < 8 || com.raktaseva.app.ui.state.LocalUserState.tryParseDate(lastDonationDate) == null)
 
     val canContinue = when (step) {
         1 -> name.isNotBlank() && isEmailValid && isPhoneValid && isPasswordValid && isConfirmPasswordValid
-        2 -> age.isNotBlank() && gender.isNotBlank() && isAgeValid && bloodGroup.isNotBlank()
+        2 -> age.isNotBlank() && gender.isNotBlank() && isAgeValid && bloodGroup.isNotBlank() && isDateValid
         else -> intent.isNotBlank()
     }
 
@@ -309,7 +325,12 @@ fun RegistrationScreen(
                         onValueChange = { name = it },
                         label = { Text("Full Name") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(nameFocusRequester),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { emailFocusRequester.requestFocus() }),
+                        singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -319,8 +340,12 @@ fun RegistrationScreen(
                         onValueChange = { email = it },
                         label = { Text("Email Address") },
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(emailFocusRequester),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { phoneFocusRequester.requestFocus() }),
+                        singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         isError = showEmailError,
                         supportingText = if (showEmailError) { { Text("Enter a valid email address", color = MaterialTheme.colorScheme.error) } } else null
@@ -333,8 +358,12 @@ fun RegistrationScreen(
                         label = { Text("Mobile Number") },
                         prefix = { Text("+91 ", fontWeight = FontWeight.Bold) },
                         leadingIcon = { Icon(Icons.Rounded.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(phoneFocusRequester),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { passwordFocusRequester.requestFocus() }),
+                        singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -351,9 +380,13 @@ fun RegistrationScreen(
                                 Icon(imageVector = image, contentDescription = description)
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(passwordFocusRequester),
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { confirmPasswordFocusRequester.requestFocus() }),
+                        singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -370,9 +403,13 @@ fun RegistrationScreen(
                                 Icon(imageVector = image, contentDescription = description)
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(confirmPasswordFocusRequester),
                         visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         isError = showConfirmPasswordError,
                         supportingText = if (showConfirmPasswordError) { { Text("Passwords do not match", color = MaterialTheme.colorScheme.error) } } else null
@@ -386,8 +423,12 @@ fun RegistrationScreen(
                         value = age,
                         onValueChange = { age = it.filter(Char::isDigit).take(3) },
                         label = { Text("Age") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(ageFocusRequester),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { lastDonationDateFocusRequester.requestFocus() }),
+                        singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         isError = showAgeError,
                         trailingIcon = {
@@ -464,11 +505,21 @@ fun RegistrationScreen(
                                 Icon(Icons.Default.DateRange, contentDescription = "Select Date") 
                             }
                         },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = showDateError,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         placeholder = { Text("DD/MM/YYYY") },
                         visualTransformation = DateTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(lastDonationDateFocusRequester),
+                        shape = RoundedCornerShape(12.dp),
+                        supportingText = if (showDateError) {
+                            { Text("Enter a valid complete date (DD/MM/YYYY) or leave blank", color = MaterialTheme.colorScheme.error) }
+                        } else {
+                            { Text("Format: DD/MM/YYYY") }
+                        }
                     )
                 }
                 3 -> {

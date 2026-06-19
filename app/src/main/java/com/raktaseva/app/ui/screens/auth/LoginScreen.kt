@@ -25,6 +25,11 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.raktaseva.app.ui.state.LocalUserState
 import com.google.firebase.auth.FirebaseAuth
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalFocusManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +37,9 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onBack: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+    val passwordFocusRequester = remember { FocusRequester() }
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -57,7 +65,8 @@ fun LoginScreen(
                         value = forgotPasswordEmail,
                         onValueChange = { forgotPasswordEmail = it },
                         label = { Text("Email") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -151,7 +160,8 @@ fun LoginScreen(
                     Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { passwordFocusRequester.requestFocus() }),
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -176,9 +186,12 @@ fun LoginScreen(
                         Icon(imageVector = image, contentDescription = description)
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(passwordFocusRequester),
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -226,6 +239,7 @@ fun LoginScreen(
                                             LocalUserState.age.value = document.getString("age") ?: ""
                                             LocalUserState.gender.value = document.getString("gender") ?: ""
                                             LocalUserState.bloodGroup.value = document.getString("bloodGroup") ?: "O+"
+                                            LocalUserState.isAvailable.value = document.getBoolean("isAvailable") ?: false
                                             
                                             val lastDate = document.getString("lastDonationDate") ?: ""
                                             LocalUserState.lastDonationDate.value = lastDate

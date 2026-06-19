@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -28,27 +29,95 @@ import com.raktaseva.app.ui.state.LocalUserState
 import java.util.UUID
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalFocusManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RequestBloodScreen(onBack: () -> Unit) {
-    var bloodGroup by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    val hospitalFocusRequester = remember { FocusRequester() }
+    val notesFocusRequester = remember { FocusRequester() }
+
+    var bloodGroup by rememberSaveable { mutableStateOf("") }
     var bloodGroupExpanded by remember { mutableStateOf(false) }
     val bloodGroups = listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")
     
-    var hospital by remember { mutableStateOf("") }
-    var units by remember { mutableStateOf("") }
+    var hospital by rememberSaveable { mutableStateOf("") }
+    var units by rememberSaveable { mutableStateOf("") }
     var unitsExpanded by remember { mutableStateOf(false) }
     val unitOptions = (1..10).map { it.toString() }
     
-    var urgency by remember { mutableStateOf("Medium") }
-    var notes by remember { mutableStateOf("") }
+    var urgency by rememberSaveable { mutableStateOf("Medium") }
+    var notes by rememberSaveable { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
     var isGeneratingAi by remember { mutableStateOf(false) }
+    var showAiOverwriteDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val canSubmit = bloodGroup.isNotBlank() && hospital.trim().isNotBlank() && (units.toIntOrNull() ?: 0) > 0
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    fun triggerAiGeneration() {
+        if (bloodGroup.isBlank()) {
+            coroutineScope.launch { snackbarHostState.showSnackbar("Please select a blood group first.") }
+            return
+        }
+        isGeneratingAi = true
+        coroutineScope.launch {
+            val toneDescription = when (urgency.lowercase()) {
+                "low" -> "calm and informative. Explain the situation and request matching donors calmly."
+                "medium" -> "encouraging and supportive. Motivate voluntary donors to help out."
+                "high" -> "strong call to action. Emphasize the urgent need and prompt immediate response."
+                "critical" -> "immediate life-saving appeal. Stress the extreme critical nature of the emergency and appeal for help immediately."
+                else -> "encouraging and supportive."
+            }
+
+            val prompt = buildString {
+                appendLine("Generate a natural, concise, human-sounding emergency blood request appeal paragraph of about 50-60 words.")
+                appendLine("Integrate the following medical details naturally into the narrative:")
+                appendLine("- Required Blood Group: $bloodGroup")
+                if (hospital.trim().isNotEmpty()) {
+                    appendLine("- Hospital: ${hospital.trim()}")
+                }
+                if (units.trim().isNotEmpty()) {
+                    appendLine("- Units Required: $units")
+                }
+                appendLine("- Urgency level: $urgency")
+                appendLine()
+                appendLine("Instructions:")
+                appendLine("1. Tone: The appeal tone must be $toneDescription")
+                appendLine("2. Layout: Output ONLY a single, continuous paragraph. Do NOT use emojis, section headers, bullet points, numbered lists, line breaks, or hashtags.")
+                appendLine("3. Format: Avoid repeating raw key-value pairs or duplicating labels like 'Patient Name:', 'Hospital:', 'Blood Group:', or 'Units:'. Instead, integrate these facts smoothly and naturally into human sentences.")
+                appendLine("4. Output constraint: Do NOT include any conversational introduction, notes, greetings, or explanations. Only return the appeal text itself.")
+            }
+
+            val messages = listOf(
+                GroqMessage(
+                    role = "system",
+                    content = "You are a medical emergency assistant. Generate a natural, cohesive appeal paragraph based on the inputs and tone requested. Do not include emojis, bullet points, headers, or any duplicate fields. Output ONLY the paragraph text itself without any introduction or markdown formatting."
+                ),
+                GroqMessage(role = "user", content = prompt)
+            )
+
+            val result = GroqRepository.chat(
+                messages = messages,
+                temperature = 0.7,
+                maxTokens = 256
+            )
+
+            result.onSuccess { generatedText ->
+                notes = generatedText.take(500)
+            }.onFailure { error ->
+                snackbarHostState.showSnackbar(error.message ?: "Failed to generate message. Please try again.")
+            }
+
+            isGeneratingAi = false
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -108,7 +177,11 @@ fun RequestBloodScreen(onBack: () -> Unit) {
                 value = hospital, 
                 onValueChange = { hospital = it }, 
                 label = { Text("Hospital Name & Location") }, 
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(hospitalFocusRequester),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { notesFocusRequester.requestFocus() }),
                 shape = RoundedCornerShape(12.dp)
             )
             
@@ -167,11 +240,39 @@ fun RequestBloodScreen(onBack: () -> Unit) {
                 onValueChange = { if (it.length <= 500) notes = it },
                 label = { Text("Additional Notes") },
                 supportingText = { Text("${notes.length}/500") },
-                modifier = Modifier.fillMaxWidth().height(120.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .focusRequester(notesFocusRequester),
                 maxLines = 5,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 shape = RoundedCornerShape(12.dp)
             )
             
+            if (showAiOverwriteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAiOverwriteDialog = false },
+                    title = { Text("Overwrite Notes?") },
+                    text = { Text("You have typed some notes manually. Generating an AI message will overwrite your existing text. Do you want to proceed?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showAiOverwriteDialog = false
+                                triggerAiGeneration()
+                            }
+                        ) {
+                            Text("Overwrite", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showAiOverwriteDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
             Surface(
                 onClick = {
                     if (isGeneratingAi) return@Surface
@@ -179,44 +280,10 @@ fun RequestBloodScreen(onBack: () -> Unit) {
                         coroutineScope.launch { snackbarHostState.showSnackbar("Please select a blood group first.") }
                         return@Surface
                     }
-                    isGeneratingAi = true
-                    coroutineScope.launch {
-                        val prompt = buildString {
-                            appendLine("Generate a short, urgent emergency blood donation request message (under 120 words).")
-                            appendLine()
-                            appendLine("Details:")
-                            appendLine("- Blood group needed: $bloodGroup")
-                            if (hospital.isNotBlank()) appendLine("- Hospital/Location: ${hospital.trim()}")
-                            if (units.isNotBlank()) appendLine("- Units required: $units")
-                            appendLine("- Urgency level: $urgency")
-                            if (notes.isNotBlank()) appendLine("- Context from requester: ${notes.trim()}")
-                            appendLine()
-                            appendLine("Requirements:")
-                            appendLine("- Make it emotionally urgent but professional")
-                            appendLine("- Include a clear call to action for donors")
-                            appendLine("- Keep it human-sounding and shareable")
-                            appendLine("- Do NOT add hashtags, phone numbers, or markdown formatting")
-                            appendLine("- Output ONLY the message text, nothing else")
-                        }
-
-                        val messages = listOf(
-                            GroqMessage(role = "system", content = "You are a concise medical emergency message writer for the Rakta-Seva Connect blood donation app. Write short, urgent, respectful donor request messages. Output only the message text."),
-                            GroqMessage(role = "user", content = prompt)
-                        )
-
-                        val result = GroqRepository.chat(
-                            messages = messages,
-                            temperature = 0.7,
-                            maxTokens = 256
-                        )
-
-                        result.onSuccess { generatedText ->
-                            notes = generatedText.take(500)
-                        }.onFailure { error ->
-                            snackbarHostState.showSnackbar(error.message ?: "Failed to generate message. Please try again.")
-                        }
-
-                        isGeneratingAi = false
+                    if (notes.trim().isNotEmpty()) {
+                        showAiOverwriteDialog = true
+                    } else {
+                        triggerAiGeneration()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -270,20 +337,26 @@ fun RequestBloodScreen(onBack: () -> Unit) {
                             }
 
                             val requestId = UUID.randomUUID().toString()
-                            val request = BloodRequest(
-                                requestId = requestId,
-                                requesterUid = LocalUserState.uid.value,
-                                requesterName = LocalUserState.name.value,
-                                requesterEmail = LocalUserState.email.value,
-                                bloodGroup = bloodGroup,
-                                hospitalName = hospital,
-                                hospitalLocation = hospital,
-                                unitsRequired = units.toIntOrNull() ?: 0,
-                                urgencyLevel = urgency,
-                                additionalNotes = notes,
-                                requestStatus = "active"
+                            val requestMap = hashMapOf(
+                                "requestId" to requestId,
+                                "requesterUid" to LocalUserState.uid.value,
+                                "requesterName" to LocalUserState.name.value,
+                                "requesterEmail" to LocalUserState.email.value,
+                                "bloodGroup" to bloodGroup,
+                                "hospitalName" to hospital,
+                                "hospitalLocation" to hospital,
+                                "unitsRequired" to (units.toIntOrNull() ?: 0),
+                                "urgencyLevel" to urgency,
+                                "additionalNotes" to notes,
+                                "requestStatus" to "active",
+                                "status" to "pending",
+                                "donorResponsesCount" to 0,
+                                "responders" to emptyList<String>(),
+                                "contactedDonors" to emptyList<String>(),
+                                "completedDonors" to emptyList<String>(),
+                                "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                             )
-                            db.collection("requests").document(requestId).set(request).await()
+                            db.collection("requests").document(requestId).set(requestMap).await()
                             
                             isSubmitting = false
                             Toast.makeText(context, "Request posted successfully", Toast.LENGTH_SHORT).show()
