@@ -132,6 +132,10 @@ graph TD
 
 ## 📱 Screenshots
 
+<div align="center">
+
+## 📱 Screenshots
+
 <table>
 <tr>
 <td align="center">
@@ -170,6 +174,7 @@ graph TD
 </tr>
 </table>
 
+</div>
 
 ---
 
